@@ -1,6 +1,6 @@
 M1
 - Project skeleton
-- Github Pages deployment
+- GitHub Pages deployment
 
 M2
 - STEP import
