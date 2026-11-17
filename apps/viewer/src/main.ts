@@ -1,6 +1,5 @@
 import { LibcascadeKernel } from "@browser-step/kernel";
 import { createStepRenderer } from "@browser-step/renderer";
-import "./style.css";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 

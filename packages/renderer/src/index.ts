@@ -32,6 +32,22 @@ export function createGeometryGroup(meshes: TriangleMesh[]): THREE.Group {
   return group;
 }
 
+function disposeGeometryGroup(group: THREE.Group): void {
+  const materials = new Set<THREE.Material>();
+
+  group.traverse((object) => {
+    if (object instanceof THREE.Mesh) {
+      object.geometry.dispose();
+      const meshMaterials = Array.isArray(object.material)
+        ? object.material
+        : [object.material];
+      meshMaterials.forEach((material) => materials.add(material));
+    }
+  });
+
+  materials.forEach((material) => material.dispose());
+}
+
 export function createStepRenderer(container: HTMLElement): {
   renderMeshes(meshes: TriangleMesh[]): void;
   dispose(): void;
@@ -69,13 +85,7 @@ export function createStepRenderer(container: HTMLElement): {
   const renderMeshes = (meshes: TriangleMesh[]) => {
     if (geometryGroup) {
       scene.remove(geometryGroup);
-      geometryGroup.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.geometry.dispose();
-        }
-      });
-      (geometryGroup.children[0] as THREE.Mesh | undefined)?.material &&
-        ((geometryGroup.children[0] as THREE.Mesh).material as THREE.Material).dispose();
+      disposeGeometryGroup(geometryGroup);
     }
 
     geometryGroup = createGeometryGroup(meshes);
@@ -106,12 +116,7 @@ export function createStepRenderer(container: HTMLElement): {
     dispose() {
       window.cancelAnimationFrame(animationFrame);
       window.removeEventListener("resize", resize);
-      geometryGroup?.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
-          object.geometry.dispose();
-          (object.material as THREE.Material).dispose();
-        }
-      });
+      if (geometryGroup) disposeGeometryGroup(geometryGroup);
       renderer.dispose();
       container.removeChild(renderer.domElement);
     },

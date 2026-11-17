@@ -110,53 +110,61 @@ export class LibcascadeKernel implements CadKernel {
             try {
               const triangulation = oc.BRep_Tool.Triangulation(face, location, 0);
 
-              if (triangulation && triangulation.NbNodes() > 0) {
-                const transform = location.Transformation();
-                const positions: number[] = [];
-                const indices: number[] = [];
+              try {
+                if (triangulation && triangulation.NbNodes() > 0) {
+                  const transform = location.Transformation();
+                  const positions: number[] = [];
+                  const indices: number[] = [];
 
-                try {
-                  for (let nodeIndex = 1; nodeIndex <= triangulation.NbNodes(); nodeIndex += 1) {
-                    const point = triangulation.Node(nodeIndex);
-                    try {
-                      point.Transform(transform);
-                      positions.push(point.X(), point.Y(), point.Z());
-                    } finally {
-                      point.delete();
+                  try {
+                    for (
+                      let nodeIndex = 1;
+                      nodeIndex <= triangulation.NbNodes();
+                      nodeIndex += 1
+                    ) {
+                      const point = triangulation.Node(nodeIndex);
+                      try {
+                        point.Transform(transform);
+                        positions.push(point.X(), point.Y(), point.Z());
+                      } finally {
+                        point.delete();
+                      }
                     }
+
+                    const reversed =
+                      face.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED;
+
+                    for (
+                      let triangleIndex = 1;
+                      triangleIndex <= triangulation.NbTriangles();
+                      triangleIndex += 1
+                    ) {
+                      const triangle = triangulation.Triangle(triangleIndex);
+                      try {
+                        const { theN1, theN2, theN3 } = triangle.Get();
+                        indices.push(
+                          theN1 - 1,
+                          (reversed ? theN3 : theN2) - 1,
+                          (reversed ? theN2 : theN3) - 1,
+                        );
+                      } finally {
+                        triangle.delete();
+                      }
+                    }
+                  } finally {
+                    transform.delete();
                   }
 
-                  const reversed =
-                    face.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED;
-
-                  for (
-                    let triangleIndex = 1;
-                    triangleIndex <= triangulation.NbTriangles();
-                    triangleIndex += 1
-                  ) {
-                    const triangle = triangulation.Triangle(triangleIndex);
-                    try {
-                      const { theN1, theN2, theN3 } = triangle.Get();
-                      indices.push(
-                        theN1 - 1,
-                        (reversed ? theN3 : theN2) - 1,
-                        (reversed ? theN2 : theN3) - 1,
-                      );
-                    } finally {
-                      triangle.delete();
-                    }
+                  if (indices.length > 0) {
+                    meshes.push({
+                      positions: new Float32Array(positions),
+                      indices: new Uint32Array(indices),
+                      faceIndex,
+                    });
                   }
-                } finally {
-                  transform.delete();
                 }
-
-                if (indices.length > 0) {
-                  meshes.push({
-                    positions: new Float32Array(positions),
-                    indices: new Uint32Array(indices),
-                    faceIndex,
-                  });
-                }
+              } finally {
+                triangulation?.delete();
               }
 
               faceIndex += 1;
