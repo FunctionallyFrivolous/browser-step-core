@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
 
-export default defineConfig(({ command }) => ({
-  base: command === "build" ? "/browser-step-core/" : "/",
+export default defineConfig(({ command, isPreview }) => ({
+  base: command === "build" || isPreview ? "/browser-step-core/" : "/",
 }));
