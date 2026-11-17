@@ -8,7 +8,7 @@ if (!app) {
 }
 
 const heading = document.createElement("h1");
-heading.textContent = "Browser STEP Core";
+heading.textContent = "STEP Model Viewer";
 
 const fileInput = document.createElement("input");
 fileInput.type = "file";
