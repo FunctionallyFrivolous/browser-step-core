@@ -25,11 +25,13 @@ test("creates a Three.js mesh for each tessellated face", () => {
 
 test("fits the camera around the bounds center with viewport padding", () => {
   const camera = new THREE.PerspectiveCamera(45, 2, 0.01, 100000);
+  camera.position.set(6, 8, 12);
   const bounds = new THREE.Box3(
     new THREE.Vector3(8, 18, 28),
     new THREE.Vector3(12, 22, 32),
   );
-  const target = new THREE.Vector3();
+  const target = new THREE.Vector3(1, 2, 3);
+  const direction = camera.position.clone().sub(target).normalize();
 
   fitCameraToBounds(camera, bounds, target);
 
@@ -41,7 +43,27 @@ test("fits the camera around the bounds center with viewport padding", () => {
     (radius * 1.15) / Math.sin(Math.min(verticalFov, horizontalFov) / 2);
 
   assert.deepEqual(target.toArray(), center.toArray());
+  assert.ok(
+    camera.position.clone().sub(center).normalize().distanceTo(direction) < 1e-10,
+  );
   assert.ok(Math.abs(camera.position.distanceTo(center) - expectedDistance) < 1e-10);
   assert.equal(camera.near, radius / 1000);
   assert.equal(camera.far, radius * 100);
+});
+
+test("uses the default view direction when the camera and target coincide", () => {
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100000);
+  const bounds = new THREE.Box3(
+    new THREE.Vector3(-1, -1, -1),
+    new THREE.Vector3(1, 1, 1),
+  );
+  const target = new THREE.Vector3();
+
+  fitCameraToBounds(camera, bounds, target);
+
+  const center = bounds.getCenter(new THREE.Vector3());
+  const direction = new THREE.Vector3(1.8, 1.8, 2.4).normalize();
+  assert.ok(
+    camera.position.clone().sub(center).normalize().distanceTo(direction) < 1e-10,
+  );
 });

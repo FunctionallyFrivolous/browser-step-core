@@ -16,15 +16,16 @@ export function fitCameraToBounds(
 
   const center = bounds.getCenter(new THREE.Vector3());
   const radius = Math.max(bounds.getBoundingSphere(new THREE.Sphere()).radius, 0.01);
+  const direction = camera.position.clone().sub(target);
+  if (direction.lengthSq() === 0) direction.set(1.8, 1.8, 2.4);
+  direction.normalize();
   const verticalFov = THREE.MathUtils.degToRad(camera.fov);
   const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
   const halfFov = Math.min(verticalFov, horizontalFov) / 2;
   const distance = (radius * 1.15) / Math.sin(halfFov);
 
   target.copy(center);
-  camera.position
-    .copy(center)
-    .add(new THREE.Vector3(1.8, 1.8, 2.4).normalize().multiplyScalar(distance));
+  camera.position.copy(center).add(direction.multiplyScalar(distance));
   camera.near = Math.max(radius / 1000, 0.001);
   camera.far = radius * 100;
   camera.lookAt(center);
