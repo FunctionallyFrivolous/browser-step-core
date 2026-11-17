@@ -39,19 +39,31 @@ fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
   if (!file) return;
 
+  await loadModel(file.name, () => file.arrayBuffer());
+  fileInput.value = "";
+});
+
+async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Promise<void> {
   fileInput.disabled = true;
-  status.textContent = `Loading ${file.name}…`;
+  status.textContent = `Loading ${name}…`;
 
   try {
-    await kernel.loadStep(await file.arrayBuffer());
+    await kernel.loadStep(await readData());
     renderer.renderMeshes(kernel.getTessellation());
     fitButton.disabled = false;
     status.textContent =
-      `${file.name} — ${kernel.getBodyCount()} bodies, ${kernel.getFaceCount()} faces`;
+      `${name} — ${kernel.getBodyCount()} bodies, ${kernel.getFaceCount()} faces`;
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : "The STEP file could not be loaded.";
   } finally {
     fileInput.disabled = false;
-    fileInput.value = "";
   }
+}
+
+void loadModel("GDT_Hole_Str.step", async () => {
+  const response = await fetch(new URL("./GDT_Hole_Str.step", import.meta.url));
+  if (!response.ok) {
+    throw new Error("The default STEP file could not be loaded.");
+  }
+  return response.arrayBuffer();
 });
