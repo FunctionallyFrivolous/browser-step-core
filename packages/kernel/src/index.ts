@@ -3,6 +3,13 @@ export interface CadKernel {
   loadStep(data: ArrayBuffer | Uint8Array): Promise<void>;
   getBodyCount(): number;
   getFaceCount(): number;
+  getTessellation(): TriangleMesh[];
+}
+
+export interface TriangleMesh {
+  positions: Float32Array;
+  indices: Uint32Array;
+  faceIndex: number;
 }
 
 export class LibcascadeKernel implements CadKernel {
@@ -77,6 +84,100 @@ export class LibcascadeKernel implements CadKernel {
 
   getFaceCount(): number {
     return this.faceCount;
+  }
+
+  getTessellation(): TriangleMesh[] {
+    if (!this.oc || !this.shape) {
+      throw new Error("No STEP geometry has been loaded.");
+    }
+
+    const oc = this.oc;
+    const mesher = new oc.BRepMesh_IncrementalMesh(this.shape, 0.1, false, 0.5, true);
+    const meshes: TriangleMesh[] = [];
+
+    try {
+      const explorer = new oc.TopExp_Explorer(this.shape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+
+      try {
+        let faceIndex = 0;
+        while (explorer.More()) {
+          const current = explorer.Current();
+
+          try {
+            const face = oc.TopoDS.Face(current);
+            const location = new oc.TopLoc_Location();
+
+            try {
+              const triangulation = oc.BRep_Tool.Triangulation(face, location, 0);
+
+              if (triangulation && triangulation.NbNodes() > 0) {
+                const transform = location.Transformation();
+                const positions: number[] = [];
+                const indices: number[] = [];
+
+                try {
+                  for (let nodeIndex = 1; nodeIndex <= triangulation.NbNodes(); nodeIndex += 1) {
+                    const point = triangulation.Node(nodeIndex);
+                    try {
+                      point.Transform(transform);
+                      positions.push(point.X(), point.Y(), point.Z());
+                    } finally {
+                      point.delete();
+                    }
+                  }
+
+                  const reversed =
+                    face.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED;
+
+                  for (
+                    let triangleIndex = 1;
+                    triangleIndex <= triangulation.NbTriangles();
+                    triangleIndex += 1
+                  ) {
+                    const triangle = triangulation.Triangle(triangleIndex);
+                    try {
+                      const { theN1, theN2, theN3 } = triangle.Get();
+                      indices.push(
+                        theN1 - 1,
+                        (reversed ? theN3 : theN2) - 1,
+                        (reversed ? theN2 : theN3) - 1,
+                      );
+                    } finally {
+                      triangle.delete();
+                    }
+                  }
+                } finally {
+                  transform.delete();
+                }
+
+                if (indices.length > 0) {
+                  meshes.push({
+                    positions: new Float32Array(positions),
+                    indices: new Uint32Array(indices),
+                    faceIndex,
+                  });
+                }
+              }
+
+              faceIndex += 1;
+            } finally {
+              location.delete();
+              face.delete();
+            }
+          } finally {
+            current.delete();
+          }
+
+          explorer.Next();
+        }
+      } finally {
+        explorer.delete();
+      }
+    } finally {
+      mesher.delete();
+    }
+
+    return meshes;
   }
 
   private countSubshapes(
