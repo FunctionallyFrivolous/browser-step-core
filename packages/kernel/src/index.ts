@@ -14,15 +14,20 @@ export class LibcascadeKernel implements CadKernel {
 
   async initialize(): Promise<void> {
     if (!this.initialization) {
-      this.initialization = import("libcascade/single/init")
-        .then(({ createInstance }) => createInstance())
-        .then((oc) => {
-          this.oc = oc;
-        })
-        .catch((error: unknown) => {
-          this.initialization = undefined;
-          throw error;
-        });
+      this.initialization = (async () => {
+        const { createInstance } = await import("libcascade/single/init");
+        const oc =
+          typeof window === "undefined"
+            ? await createInstance()
+            : await import("libcascade/single/wasm?url").then(({ default: wasmUrl }) =>
+                createInstance({ locateFile: () => wasmUrl }),
+              );
+
+        this.oc = oc;
+      })().catch((error: unknown) => {
+        this.initialization = undefined;
+        throw error;
+      });
     }
 
     await this.initialization;
