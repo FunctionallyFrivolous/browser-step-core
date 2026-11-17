@@ -1,0 +1,19 @@
+{
+  "name": "browser-step-core",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/renderer",
+    "packages/kernel",
+    "apps/viewer"
+  ],
+  "scripts": {
+    "build": "npm run typecheck && npm run build --workspace @browser-step/viewer",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
