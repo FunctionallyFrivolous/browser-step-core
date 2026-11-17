@@ -1,9 +1,34 @@
 import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 export interface TriangleMesh {
   positions: Float32Array;
   indices: Uint32Array;
   faceIndex: number;
+}
+
+export function fitCameraToBounds(
+  camera: THREE.PerspectiveCamera,
+  bounds: THREE.Box3,
+  target: THREE.Vector3,
+): void {
+  if (bounds.isEmpty()) return;
+
+  const center = bounds.getCenter(new THREE.Vector3());
+  const radius = Math.max(bounds.getBoundingSphere(new THREE.Sphere()).radius, 0.01);
+  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
+  const halfFov = Math.min(verticalFov, horizontalFov) / 2;
+  const distance = (radius * 1.15) / Math.sin(halfFov);
+
+  target.copy(center);
+  camera.position
+    .copy(center)
+    .add(new THREE.Vector3(1.8, 1.8, 2.4).normalize().multiplyScalar(distance));
+  camera.near = Math.max(radius / 1000, 0.001);
+  camera.far = radius * 100;
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
 }
 
 export function createFaceGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
@@ -50,6 +75,7 @@ function disposeGeometryGroup(group: THREE.Group): void {
 
 export function createStepRenderer(container: HTMLElement): {
   renderMeshes(meshes: TriangleMesh[]): void;
+  fitToView(): void;
   dispose(): void;
 } {
   const scene = new THREE.Scene();
@@ -66,6 +92,8 @@ export function createStepRenderer(container: HTMLElement): {
   light.position.set(1, 2, 3);
   scene.add(light);
 
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
   let animationFrame = 0;
 
@@ -78,8 +106,17 @@ export function createStepRenderer(container: HTMLElement): {
   };
 
   const draw = () => {
+    controls.update();
     renderer.render(scene, camera);
     animationFrame = window.requestAnimationFrame(draw);
+  };
+
+  const fitToView = () => {
+    if (!geometryGroup) return;
+
+    const bounds = new THREE.Box3().setFromObject(geometryGroup);
+    fitCameraToBounds(camera, bounds, controls.target);
+    controls.update();
   };
 
   const renderMeshes = (meshes: TriangleMesh[]) => {
@@ -90,21 +127,7 @@ export function createStepRenderer(container: HTMLElement): {
 
     geometryGroup = createGeometryGroup(meshes);
     scene.add(geometryGroup);
-
-    const bounds = new THREE.Box3().setFromObject(geometryGroup);
-    if (!bounds.isEmpty()) {
-      const center = bounds.getCenter(new THREE.Vector3());
-      const radius = Math.max(bounds.getBoundingSphere(new THREE.Sphere()).radius, 0.01);
-      camera.position.set(
-        center.x + radius * 1.8,
-        center.y + radius * 1.8,
-        center.z + radius * 2.4,
-      );
-      camera.near = Math.max(radius / 1000, 0.001);
-      camera.far = radius * 100;
-      camera.lookAt(center);
-      camera.updateProjectionMatrix();
-    }
+    fitToView();
   };
 
   resize();
@@ -113,9 +136,11 @@ export function createStepRenderer(container: HTMLElement): {
 
   return {
     renderMeshes,
+    fitToView,
     dispose() {
       window.cancelAnimationFrame(animationFrame);
       window.removeEventListener("resize", resize);
+      controls.dispose();
       if (geometryGroup) disposeGeometryGroup(geometryGroup);
       renderer.dispose();
       container.removeChild(renderer.domElement);
