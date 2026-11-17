@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createGeometryGroup } from "../src/index.ts";
+import * as THREE from "three";
+import { createGeometryGroup, fitCameraToBounds } from "../src/index.ts";
 
 test("creates a Three.js mesh for each tessellated face", () => {
   const group = createGeometryGroup([
@@ -20,4 +21,27 @@ test("creates a Three.js mesh for each tessellated face", () => {
 
   mesh.geometry.dispose();
   mesh.material.dispose();
+});
+
+test("fits the camera around the bounds center with viewport padding", () => {
+  const camera = new THREE.PerspectiveCamera(45, 2, 0.01, 100000);
+  const bounds = new THREE.Box3(
+    new THREE.Vector3(8, 18, 28),
+    new THREE.Vector3(12, 22, 32),
+  );
+  const target = new THREE.Vector3();
+
+  fitCameraToBounds(camera, bounds, target);
+
+  const center = bounds.getCenter(new THREE.Vector3());
+  const radius = bounds.getBoundingSphere(new THREE.Sphere()).radius;
+  const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+  const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * camera.aspect);
+  const expectedDistance =
+    (radius * 1.15) / Math.sin(Math.min(verticalFov, horizontalFov) / 2);
+
+  assert.deepEqual(target.toArray(), center.toArray());
+  assert.ok(Math.abs(camera.position.distanceTo(center) - expectedDistance) < 1e-10);
+  assert.equal(camera.near, radius / 1000);
+  assert.equal(camera.far, radius * 100);
 });
