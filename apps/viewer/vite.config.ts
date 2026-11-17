@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
 
 export default defineConfig(({ command, isPreview }) => ({
-  base: command === "build" || isPreview ? "/browser-step-core/" : "/",
+  base: process.env.VITE_BASE || (command === "build" || isPreview ? "/browser-step-core/" : "/"),
 }));

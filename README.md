@@ -17,11 +17,13 @@ Run `npm run build` at the repository root to type-check the workspace and build
 ## GitHub Pages deployment
 
 In the repository's **Settings → Pages → Build and deployment**, set **Source** to
-**GitHub Actions**. Do not select a branch as the source: its separate Pages
-deployment can overwrite the built viewer with repository source files.
+**Deploy from a branch**, select the `gh-pages` branch and `/ (root)` folder.
+In **Settings → Actions → General → Workflow permissions**, allow read and write
+permissions so the workflows can publish the viewer and PR previews.
 
-The `Deploy viewer` workflow builds the workspace and publishes `apps/viewer/dist`
-on pushes to `main` or when manually dispatched. After changing the Pages source,
-run the workflow again. Open the deployed page and check the browser console and
-network panel for errors; the viewer should load its JavaScript from
-`/browser-step-core/assets/`, not `/src/main.ts`.
+The `Deploy viewer` workflow publishes `apps/viewer/dist` on pushes to `main` or
+when manually dispatched, preserving active previews. The `Preview viewer`
+workflow publishes a temporary URL for same-repository pull requests, updates
+the PR comment when the preview changes, and removes the preview when the PR is
+closed. GitHub does not grant write access to fork PR workflows, so those PRs
+are built by CI but do not receive a preview.
