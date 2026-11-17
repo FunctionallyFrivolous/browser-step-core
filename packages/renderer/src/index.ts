@@ -7,6 +7,9 @@ export interface TriangleMesh {
   faceIndex: number;
 }
 
+const FACE_COLOR = 0x9caec2;
+const SELECTED_FACE_COLOR = 0xffc7c7;
+
 export function fitCameraToBounds(
   camera: THREE.PerspectiveCamera,
   bounds: THREE.Box3,
@@ -43,19 +46,44 @@ export function createFaceGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
 
 export function createGeometryGroup(meshes: TriangleMesh[]): THREE.Group {
   const group = new THREE.Group();
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x9caec2,
-    metalness: 0.1,
-    roughness: 0.65,
-  });
 
   for (const mesh of meshes) {
+    const material = new THREE.MeshStandardMaterial({
+      color: FACE_COLOR,
+      metalness: 0.1,
+      roughness: 0.65,
+    });
     const object = new THREE.Mesh(createFaceGeometry(mesh), material);
     object.userData.faceIndex = mesh.faceIndex;
     group.add(object);
   }
 
   return group;
+}
+
+export function updateFaceSelection(
+  group: THREE.Group,
+  selectedFaceIndices: Set<number>,
+  faceIndex?: number,
+): Set<number> {
+  const nextSelection =
+    faceIndex === undefined
+      ? new Set<number>()
+      : new Set([...selectedFaceIndices, faceIndex]);
+
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || Array.isArray(object.material)) return;
+    if (!("color" in object.material)) return;
+
+    const material = object.material as THREE.MeshStandardMaterial;
+    material.color.set(
+      nextSelection.has(object.userData.faceIndex)
+        ? SELECTED_FACE_COLOR
+        : FACE_COLOR,
+    );
+  });
+
+  return nextSelection;
 }
 
 function disposeGeometryGroup(group: THREE.Group): void {
@@ -74,9 +102,13 @@ function disposeGeometryGroup(group: THREE.Group): void {
   materials.forEach((material) => material.dispose());
 }
 
-export function createStepRenderer(container: HTMLElement): {
+export function createStepRenderer(
+  container: HTMLElement,
+  onSelectionChange: (selectedFaceIndices: number[]) => void = () => {},
+): {
   renderMeshes(meshes: TriangleMesh[]): void;
   fitToView(): void;
+  getSelectedFaces(): number[];
   dispose(): void;
 } {
   const scene = new THREE.Scene();
@@ -96,7 +128,10 @@ export function createStepRenderer(container: HTMLElement): {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
+  let selectedFaceIndices = new Set<number>();
   let animationFrame = 0;
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
 
   const resize = () => {
     const width = Math.max(container.clientWidth, 1);
@@ -120,6 +155,32 @@ export function createStepRenderer(container: HTMLElement): {
     controls.update();
   };
 
+  const selectFace = (faceIndex?: number) => {
+    selectedFaceIndices = geometryGroup
+      ? updateFaceSelection(geometryGroup, selectedFaceIndices, faceIndex)
+      : new Set<number>();
+    onSelectionChange([...selectedFaceIndices]);
+  };
+
+  const handleCanvasClick = (event: MouseEvent) => {
+    if (!geometryGroup) return;
+
+    const bounds = renderer.domElement.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return;
+    pointer.x = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+    pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+
+    const intersection = raycaster
+      .intersectObject(geometryGroup, true)
+      .find((hit) => typeof hit.object.userData.faceIndex === "number");
+    selectFace(intersection?.object.userData.faceIndex);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") selectFace();
+  };
+
   const renderMeshes = (meshes: TriangleMesh[]) => {
     if (geometryGroup) {
       scene.remove(geometryGroup);
@@ -128,19 +189,25 @@ export function createStepRenderer(container: HTMLElement): {
 
     geometryGroup = createGeometryGroup(meshes);
     scene.add(geometryGroup);
+    selectFace();
     fitToView();
   };
 
   resize();
   window.addEventListener("resize", resize);
+  renderer.domElement.addEventListener("click", handleCanvasClick);
+  window.addEventListener("keydown", handleKeyDown);
   draw();
 
   return {
     renderMeshes,
     fitToView,
+    getSelectedFaces: () => [...selectedFaceIndices],
     dispose() {
       window.cancelAnimationFrame(animationFrame);
       window.removeEventListener("resize", resize);
+      renderer.domElement.removeEventListener("click", handleCanvasClick);
+      window.removeEventListener("keydown", handleKeyDown);
       controls.dispose();
       if (geometryGroup) disposeGeometryGroup(geometryGroup);
       renderer.dispose();

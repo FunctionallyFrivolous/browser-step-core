@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
-import { createGeometryGroup, fitCameraToBounds } from "../src/index.ts";
+import {
+  createGeometryGroup,
+  fitCameraToBounds,
+  updateFaceSelection,
+} from "../src/index.ts";
 
 test("creates a Three.js mesh for each tessellated face", () => {
   const group = createGeometryGroup([
@@ -21,6 +25,50 @@ test("creates a Three.js mesh for each tessellated face", () => {
 
   mesh.geometry.dispose();
   mesh.material.dispose();
+});
+
+test("adds and highlights selected faces without replacing prior selections", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+    {
+      faceIndex: 5,
+      positions: new Float32Array([0, 0, 1, 1, 0, 1, 0, 1, 1]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const firstSelection = updateFaceSelection(group, new Set(), 4);
+  const selected = updateFaceSelection(group, firstSelection, 5);
+
+  assert.deepEqual([...selected], [4, 5]);
+  assert.ok(group.children.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
+  assert.notEqual(group.children[0].material, group.children[1].material);
+
+  group.children.forEach((mesh) => {
+    mesh.geometry.dispose();
+    mesh.material.dispose();
+  });
+});
+
+test("clears selected faces and restores their base color when no face is hit", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const selection = updateFaceSelection(group, new Set(), 4);
+  const cleared = updateFaceSelection(group, selection);
+
+  assert.equal(cleared.size, 0);
+  assert.equal(group.children[0].material.color.getHex(), 0x9caec2);
+
+  group.children[0].geometry.dispose();
+  group.children[0].material.dispose();
 });
 
 test("fits the camera around the bounds center with viewport padding", () => {

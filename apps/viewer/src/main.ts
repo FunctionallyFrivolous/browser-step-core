@@ -25,13 +25,21 @@ status.className = "status";
 status.setAttribute("aria-live", "polite");
 status.textContent = "Choose a STEP file to display.";
 
+const selectionStatus = document.createElement("p");
+selectionStatus.className = "status";
+selectionStatus.setAttribute("aria-live", "polite");
+selectionStatus.textContent = "0 faces selected";
+
 const viewport = document.createElement("div");
 viewport.className = "viewport";
 
-app.append(heading, fileInput, fitButton, status, viewport);
+app.append(heading, fileInput, fitButton, status, selectionStatus, viewport);
 
 const kernel = new LibcascadeKernel();
-const renderer = createStepRenderer(viewport);
+const renderer = createStepRenderer(viewport, (selectedFaceIndices) => {
+  const count = selectedFaceIndices.length;
+  selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
+});
 
 fitButton.addEventListener("click", renderer.fitToView);
 
