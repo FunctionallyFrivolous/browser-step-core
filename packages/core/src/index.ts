@@ -9,6 +9,50 @@ export interface Command {
   undo(): void | Promise<void>;
 }
 
+export class SelectionModel {
+  private readonly faces = new Set<number>();
+  private readonly listeners = new Set<(faces: number[]) => void>();
+
+  get selectedFaces(): number[] {
+    return [...this.faces];
+  }
+
+  select(faceIndex: number): void {
+    if (this.faces.has(faceIndex)) return;
+    this.faces.add(faceIndex);
+    this.notify();
+  }
+
+  deselect(faceIndex: number): void {
+    if (!this.faces.delete(faceIndex)) return;
+    this.notify();
+  }
+
+  toggle(faceIndex: number): void {
+    if (this.faces.has(faceIndex)) {
+      this.deselect(faceIndex);
+    } else {
+      this.select(faceIndex);
+    }
+  }
+
+  clear(): void {
+    if (this.faces.size === 0) return;
+    this.faces.clear();
+    this.notify();
+  }
+
+  subscribe(listener: (faces: number[]) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify(): void {
+    const faces = this.selectedFaces;
+    for (const listener of this.listeners) listener([...faces]);
+  }
+}
+
 export class CommandManager {
   private readonly undoStack: Command[] = [];
   private readonly redoStack: Command[] = [];
