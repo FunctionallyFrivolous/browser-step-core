@@ -32,7 +32,8 @@ function validateViewState(state: ViewState): void {
     ![...state.position, ...state.target, state.verticalSpan, state.near, state.far].every(Number.isFinite) ||
     state.verticalSpan <= 0 ||
     state.near <= 0 ||
-    state.far <= state.near
+    state.far <= state.near ||
+    state.position.every((value, index) => value === state.target[index])
   ) {
     throw new Error("Invalid camera view state.");
   }

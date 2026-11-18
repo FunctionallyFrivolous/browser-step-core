@@ -58,6 +58,7 @@ test("rejects invalid camera state without changing the current view", () => {
     { ...initial, verticalSpan: 0 },
     { ...initial, near: -1 },
     { ...initial, far: initial.near },
+    { ...initial, position: [...initial.target] },
   ]) {
     assert.throws(() => view.setState(invalid), /Invalid camera view state/);
     assert.deepEqual(view.state, initial);

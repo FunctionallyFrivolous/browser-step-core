@@ -3,6 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import type { CameraProjection, ViewState } from "@browser-step/core";
 
 export interface TriangleMesh {
   positions: Float32Array;
@@ -10,8 +11,46 @@ export interface TriangleMesh {
   faceIndex: number;
 }
 
-export type CameraProjection = "orthographic" | "perspective";
+export type { CameraProjection } from "@browser-step/core";
 export type ShadingMode = "flat" | "original";
+
+export function getCameraViewState(
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
+  target: THREE.Vector3,
+): ViewState {
+  const verticalSpan = camera instanceof THREE.OrthographicCamera
+    ? (camera.top - camera.bottom) / camera.zoom
+    : 2 * camera.position.distanceTo(target) *
+      Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV()) / 2);
+  return {
+    projection: camera instanceof THREE.OrthographicCamera ? "orthographic" : "perspective",
+    position: camera.position.toArray(),
+    target: target.toArray(),
+    verticalSpan,
+    near: camera.near,
+    far: camera.far,
+  };
+}
+
+export function createCameraFromViewState(
+  state: ViewState,
+  aspect: number,
+): THREE.PerspectiveCamera | THREE.OrthographicCamera {
+  const camera = state.projection === "perspective"
+    ? new THREE.PerspectiveCamera(45, aspect, state.near, state.far)
+    : new THREE.OrthographicCamera(
+      -state.verticalSpan * aspect / 2,
+      state.verticalSpan * aspect / 2,
+      state.verticalSpan / 2,
+      -state.verticalSpan / 2,
+      state.near,
+      state.far,
+    );
+  camera.position.fromArray(state.position);
+  camera.lookAt(...state.target);
+  camera.updateProjectionMatrix();
+  return camera;
+}
 
 export class PointerGestureTracker {
   private readonly pointerStarts = new Map<
@@ -98,6 +137,7 @@ export function fitOrthographicCameraToBounds(
   camera.right = (verticalSpan * aspect) / 2;
   camera.top = verticalSpan / 2;
   camera.bottom = -verticalSpan / 2;
+  camera.zoom = 1;
   target.copy(center);
   camera.position.copy(center).add(direction.multiplyScalar(radius * 3));
   camera.near = Math.max(radius / 1000, 0.001);
@@ -492,11 +532,13 @@ function disposeGeometryGroup(group: THREE.Group): void {
 export function createStepRenderer(
   container: HTMLElement,
   onPick: (faceIndex: number | undefined) => void = () => {},
+  onViewChange: (state: ViewState) => void = () => {},
 ): {
   renderMeshes(meshes: TriangleMesh[]): void;
   setSelectedFaces(faceIndices: readonly number[]): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
+  setViewState(state: ViewState): void;
   setShadingMode(shadingMode: ShadingMode): void;
   setOpacity(opacity: number): void;
   setEdgeThickness(edgeThickness: number): void;
@@ -559,10 +601,12 @@ export function createStepRenderer(
       camera.right = horizontalSpan / 2;
     }
     camera.updateProjectionMatrix();
+    onViewChange(getCameraViewState(camera, controls.target));
   };
 
   const draw = () => {
     controls.update();
+    onViewChange(getCameraViewState(camera, controls.target));
     renderer.render(scene, camera);
     animationFrame = window.requestAnimationFrame(draw);
   };
@@ -577,6 +621,7 @@ export function createStepRenderer(
       fitOrthographicCameraToBounds(camera, bounds, controls.target, aspect);
     }
     controls.update();
+    onViewChange(getCameraViewState(camera, controls.target));
   };
 
   const setProjection = (projection: CameraProjection) => {
@@ -595,12 +640,13 @@ export function createStepRenderer(
     const distance = Math.max(camera.position.distanceTo(target), 0.01);
     const verticalSpan =
       camera instanceof THREE.OrthographicCamera
-        ? camera.top - camera.bottom
-        : 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+        ? (camera.top - camera.bottom) / camera.zoom
+        : 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV()) / 2);
+    const { near, far } = camera;
 
     controls.dispose();
     if (wantsPerspective) {
-      const perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.01, 100000);
+      const perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, near, far);
       const perspectiveDistance =
         verticalSpan / (2 * Math.tan(THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2));
       perspectiveCamera.position.copy(target).add(direction.multiplyScalar(perspectiveDistance));
@@ -611,8 +657,8 @@ export function createStepRenderer(
         (verticalSpan * aspect) / 2,
         verticalSpan / 2,
         -verticalSpan / 2,
-        0.01,
-        100000,
+        near,
+        far,
       );
       orthographicCamera.position.copy(camera.position);
       camera = orthographicCamera;
@@ -622,6 +668,17 @@ export function createStepRenderer(
     controls.enableDamping = true;
     controls.target.copy(target);
     controls.update();
+    onViewChange(getCameraViewState(camera, controls.target));
+  };
+
+  const setViewState = (state: ViewState) => {
+    controls.dispose();
+    camera = createCameraFromViewState(state, aspect);
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.fromArray(state.target);
+    controls.update();
+    onViewChange(getCameraViewState(camera, controls.target));
   };
 
   const setShadingMode = (nextShadingMode: ShadingMode) => {
@@ -733,6 +790,7 @@ export function createStepRenderer(
     setSelectedFaces,
     fitToView,
     setProjection,
+    setViewState,
     setShadingMode,
     setOpacity,
     setEdgeThickness,

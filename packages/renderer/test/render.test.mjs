@@ -3,8 +3,10 @@ import { test } from "node:test";
 import * as THREE from "three";
 import {
   createGeometryGroup,
+  createCameraFromViewState,
   fitCameraToBounds,
   fitOrthographicCameraToBounds,
+  getCameraViewState,
   PointerGestureTracker,
   raycastFaceIndex,
   setGeometryGroupEdgeThickness,
@@ -14,6 +16,40 @@ import {
   setGeometryGroupSelection,
 } from "../src/index.ts";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { ViewStateModel } from "../../core/src/index.ts";
+
+test("restores shared camera views including orthographic zoom and clipping", () => {
+  const camera = new THREE.OrthographicCamera(-4, 4, 2, -2, 0.1, 200);
+  camera.position.set(6, 8, 12);
+  camera.zoom = 2;
+  const target = new THREE.Vector3(1, 2, 3);
+  const view = new ViewStateModel(getCameraViewState(camera, target));
+  view.saveBookmark("detail");
+  view.setState({
+    ...view.state,
+    projection: "perspective",
+    position: [10, 10, 10],
+  });
+  assert.equal(view.restoreBookmark("detail"), true);
+
+  const restored = createCameraFromViewState(view.state, 3);
+  assert.ok(restored instanceof THREE.OrthographicCamera);
+  assert.equal(restored.right - restored.left, 6);
+  assert.equal(restored.top - restored.bottom, 2);
+  assert.deepEqual(getCameraViewState(restored, target), view.state);
+});
+
+test("restores a perspective view with its position, target, and clipping", () => {
+  const camera = new THREE.PerspectiveCamera(45, 2, 0.2, 500);
+  camera.position.set(6, 8, 12);
+  const target = new THREE.Vector3(1, 2, 3);
+  const state = getCameraViewState(camera, target);
+  const restored = createCameraFromViewState(state, 1.5);
+
+  assert.ok(restored instanceof THREE.PerspectiveCamera);
+  assert.equal(restored.aspect, 1.5);
+  assert.deepEqual(getCameraViewState(restored, target), state);
+});
 
 function disposeGroup(group) {
   group.traverse((object) => {
@@ -466,6 +502,7 @@ test("uses the default view direction when the camera and target coincide", () =
 
 test("fits an orthographic camera to bounds while preserving its view direction", () => {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
+  camera.zoom = 3;
   camera.position.set(6, 8, 12);
   const bounds = new THREE.Box3(
     new THREE.Vector3(8, 18, 28),
@@ -489,6 +526,7 @@ test("fits an orthographic camera to bounds while preserving its view direction"
   assert.ok(Math.abs(camera.right - (verticalSpan * aspect) / 2) < 1e-10);
   assert.equal(camera.near, radius / 1000);
   assert.equal(camera.far, radius * 100);
+  assert.equal(camera.zoom, 1);
 });
 
 test("widens the orthographic vertical span for a portrait viewport", () => {
