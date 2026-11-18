@@ -360,7 +360,7 @@ export function createGeometryGroup(
           color: EDGE_COLOR,
           linewidth: clampedEdgeThickness,
           transparent: false,
-          depthTest: true,
+          depthTest: false,
           depthWrite: false,
         }),
       );
