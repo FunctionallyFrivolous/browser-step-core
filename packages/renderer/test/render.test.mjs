@@ -11,7 +11,7 @@ import {
   setGeometryGroupOpacity,
   setGeometryGroupShading,
   setGeometryGroupSmoothEdgesVisible,
-  updateFaceSelection,
+  setGeometryGroupSelection,
 } from "../src/index.ts";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 
@@ -154,8 +154,9 @@ test("switches between flat and original shading while preserving selection", ()
   ]);
   const mesh = group.children.find((child) => child instanceof THREE.Mesh);
   const selectedFaceIndices = new Set([4]);
+  setGeometryGroupSelection(group, selectedFaceIndices);
 
-  setGeometryGroupShading(group, "original", selectedFaceIndices);
+  setGeometryGroupShading(group, "original");
   assert.ok(mesh.material instanceof THREE.MeshStandardMaterial);
   assert.equal(mesh.material.color.getHex(), 0xffc7c7);
   assert.equal(mesh.material.side, THREE.DoubleSide);
@@ -165,7 +166,7 @@ test("switches between flat and original shading while preserving selection", ()
   assert.equal(mesh.material.metalness, 0.1);
   assert.equal(mesh.material.roughness, 0.65);
 
-  setGeometryGroupShading(group, "flat", selectedFaceIndices);
+  setGeometryGroupShading(group, "flat");
   assert.ok(mesh.material instanceof THREE.MeshBasicMaterial);
   assert.equal(mesh.material.color.getHex(), 0xffc7c7);
   assert.equal(mesh.material.side, THREE.DoubleSide);
@@ -217,10 +218,10 @@ test("clamps face opacity and preserves it when switching shading", () => {
   setGeometryGroupOpacity(group, 1.5);
   assert.equal(mesh.material.opacity, 1);
 
-  setGeometryGroupShading(group, "original", new Set(), 0.25);
+  setGeometryGroupShading(group, "original", 0.25);
   assert.equal(mesh.material.opacity, 0.25);
 
-  setGeometryGroupShading(group, "flat", new Set(), 0.25);
+  setGeometryGroupShading(group, "flat", 0.25);
   assert.equal(mesh.material.opacity, 0.25);
 
   disposeGroup(group);
@@ -325,7 +326,7 @@ test("classifies tangent shared boundaries as smooth and controls edge visibilit
   disposeGroup(sharpGroup);
 });
 
-test("adds and highlights selected faces without replacing prior selections", () => {
+test("highlights all faces in the supplied selection", () => {
   const group = createGeometryGroup([
     {
       faceIndex: 4,
@@ -343,8 +344,8 @@ test("adds and highlights selected faces without replacing prior selections", ()
   );
   const boundaries = getBoundaryLines(group);
   const highlights = getSelectionHighlights(group);
-  const firstSelection = updateFaceSelection(group, new Set(), 4);
-  const selected = updateFaceSelection(group, firstSelection, 5);
+  const selected = new Set([4, 5]);
+  setGeometryGroupSelection(group, selected);
 
   assert.deepEqual([...selected], [4, 5]);
   assert.ok(meshes.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
@@ -358,7 +359,7 @@ test("adds and highlights selected faces without replacing prior selections", ()
   disposeGroup(group);
 });
 
-test("deselects a clicked face without clearing other selected faces", () => {
+test("updates highlights when a face is removed from the supplied selection", () => {
   const group = createGeometryGroup([
     {
       faceIndex: 4,
@@ -376,12 +377,9 @@ test("deselects a clicked face without clearing other selected faces", () => {
   );
   const boundaries = getBoundaryLines(group);
   const highlights = getSelectionHighlights(group);
-  const selection = updateFaceSelection(
-    group,
-    updateFaceSelection(group, new Set(), 4),
-    5,
-  );
-  const deselected = updateFaceSelection(group, selection, 4);
+  setGeometryGroupSelection(group, new Set([4, 5]));
+  const deselected = new Set([5]);
+  setGeometryGroupSelection(group, deselected);
 
   assert.deepEqual([...deselected], [5]);
   assert.equal(meshes[0].material.color.getHex(), 0x9caec2);
@@ -394,7 +392,7 @@ test("deselects a clicked face without clearing other selected faces", () => {
   disposeGroup(group);
 });
 
-test("clears selected faces and restores their base color when no face is hit", () => {
+test("clears highlights and restores base color for an empty selection", () => {
   const group = createGeometryGroup([
     {
       faceIndex: 4,
@@ -402,8 +400,8 @@ test("clears selected faces and restores their base color when no face is hit", 
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
-  const selection = updateFaceSelection(group, new Set(), 4);
-  const cleared = updateFaceSelection(group, selection);
+  setGeometryGroupSelection(group, new Set([4]));
+  setGeometryGroupSelection(group, new Set());
   const mesh = group.children.find(
     (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
   );
@@ -414,7 +412,6 @@ test("clears selected faces and restores their base color when no face is hit", 
   );
   const highlight = getSelectionHighlights(group)[0];
 
-  assert.equal(cleared.size, 0);
   assert.equal(mesh.material.color.getHex(), 0x9caec2);
   assert.equal(boundary.visible, true);
   assert.equal(highlight.visible, false);
