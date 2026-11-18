@@ -49,6 +49,7 @@ const FACE_COLOR = 0x9caec2;
 const SELECTED_FACE_COLOR = 0xffc7c7;
 const EDGE_COLOR = 0x000000;
 const SELECTED_EDGE_COLOR = 0xff0000;
+const DEFAULT_FACE_OPACITY = 0.5;
 
 export function fitCameraToBounds(
   camera: THREE.PerspectiveCamera,
@@ -159,11 +160,12 @@ function createFaceBoundaryGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
 export function createGeometryGroup(
   meshes: TriangleMesh[],
   shadingMode: ShadingMode = "flat",
+  opacity = DEFAULT_FACE_OPACITY,
 ): THREE.Group {
   const group = new THREE.Group();
 
   for (const mesh of meshes) {
-    const material = createFaceMaterial(shadingMode, FACE_COLOR);
+    const material = createFaceMaterial(shadingMode, FACE_COLOR, opacity);
     const object = new THREE.Mesh(createFaceGeometry(mesh), material);
     object.userData.faceIndex = mesh.faceIndex;
     group.add(object);
@@ -205,13 +207,14 @@ export function createGeometryGroup(
 function createFaceMaterial(
   shadingMode: ShadingMode,
   color: number,
+  opacity: number,
 ): THREE.MeshBasicMaterial | THREE.MeshStandardMaterial {
   if (shadingMode === "flat") {
     return new THREE.MeshBasicMaterial({
       color,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.5,
+      opacity,
     });
   }
   return new THREE.MeshStandardMaterial({
@@ -220,7 +223,7 @@ function createFaceMaterial(
     roughness: 0.65,
     side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.5,
+    opacity,
   });
 }
 
@@ -228,6 +231,7 @@ export function setGeometryGroupShading(
   group: THREE.Group,
   shadingMode: ShadingMode,
   selectedFaceIndices: Set<number> = new Set(),
+  opacity = DEFAULT_FACE_OPACITY,
 ): void {
   group.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -243,8 +247,27 @@ export function setGeometryGroupShading(
     const color = selectedFaceIndices.has(object.userData.faceIndex)
       ? SELECTED_FACE_COLOR
       : FACE_COLOR;
-    object.material = createFaceMaterial(shadingMode, color);
+    object.material = createFaceMaterial(shadingMode, color, opacity);
     previousMaterial.dispose();
+  });
+}
+
+export function setGeometryGroupOpacity(group: THREE.Group, opacity: number): void {
+  const clampedOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    for (const material of materials) {
+      if (
+        material instanceof THREE.MeshBasicMaterial ||
+        material instanceof THREE.MeshStandardMaterial
+      ) {
+        material.opacity = clampedOpacity;
+      }
+    }
   });
 }
 
@@ -328,6 +351,7 @@ export function createStepRenderer(
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
   setShadingMode(shadingMode: ShadingMode): void;
+  setOpacity(opacity: number): void;
   getSelectedFaces(): number[];
   dispose(): void;
 } {
@@ -356,6 +380,7 @@ export function createStepRenderer(
   let geometryGroup: THREE.Group | undefined;
   let selectedFaceIndices = new Set<number>();
   let shadingMode: ShadingMode = "flat";
+  let faceOpacity = DEFAULT_FACE_OPACITY;
   let animationFrame = 0;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -449,8 +474,18 @@ export function createStepRenderer(
     if (shadingMode === nextShadingMode) return;
     shadingMode = nextShadingMode;
     if (geometryGroup) {
-      setGeometryGroupShading(geometryGroup, shadingMode, selectedFaceIndices);
+      setGeometryGroupShading(
+        geometryGroup,
+        shadingMode,
+        selectedFaceIndices,
+        faceOpacity,
+      );
     }
+  };
+
+  const setOpacity = (opacity: number) => {
+    faceOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
+    if (geometryGroup) setGeometryGroupOpacity(geometryGroup, faceOpacity);
   };
 
   const selectFace = (faceIndex?: number) => {
@@ -495,7 +530,7 @@ export function createStepRenderer(
       disposeGeometryGroup(geometryGroup);
     }
 
-    geometryGroup = createGeometryGroup(meshes, shadingMode);
+    geometryGroup = createGeometryGroup(meshes, shadingMode, faceOpacity);
     scene.add(geometryGroup);
     selectFace();
     fitToView();
@@ -516,6 +551,7 @@ export function createStepRenderer(
     fitToView,
     setProjection,
     setShadingMode,
+    setOpacity,
     getSelectedFaces: () => [...selectedFaceIndices],
     dispose() {
       window.cancelAnimationFrame(animationFrame);

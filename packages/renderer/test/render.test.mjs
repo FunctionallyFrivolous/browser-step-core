@@ -7,6 +7,7 @@ import {
   fitOrthographicCameraToBounds,
   PointerGestureTracker,
   raycastFaceIndex,
+  setGeometryGroupOpacity,
   setGeometryGroupShading,
   updateFaceSelection,
 } from "../src/index.ts";
@@ -158,6 +159,54 @@ test("switches between flat and original shading while preserving selection", ()
   assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
+
+  disposeGroup(group);
+});
+
+test("sets opacity on all face meshes without changing boundary overlays", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+    {
+      faceIndex: 5,
+      positions: new Float32Array([0, 0, 1, 1, 0, 1, 0, 1, 1]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const boundaries = getBoundaryLines(group);
+  const highlights = getSelectionHighlights(group);
+
+  setGeometryGroupOpacity(group, 0.25);
+
+  assert.ok(meshes.every((mesh) => mesh.material.opacity === 0.25));
+  assert.ok(boundaries.every((boundary) => boundary.material.opacity === 1));
+  assert.ok(highlights.every((highlight) => highlight.material.opacity === 1));
+
+  disposeGroup(group);
+});
+
+test("clamps face opacity and preserves it when switching shading", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const mesh = group.children.find((child) => child instanceof THREE.Mesh);
+
+  setGeometryGroupOpacity(group, 1.5);
+  assert.equal(mesh.material.opacity, 1);
+
+  setGeometryGroupShading(group, "original", new Set(), 0.25);
+  assert.equal(mesh.material.opacity, 0.25);
+
+  setGeometryGroupShading(group, "flat", new Set(), 0.25);
+  assert.equal(mesh.material.opacity, 0.25);
 
   disposeGroup(group);
 });

@@ -35,6 +35,19 @@ const lightingToggle = document.createElement("input");
 lightingToggle.type = "checkbox";
 lightingControl.append(lightingToggle, "Use original scene lighting");
 
+const opacityControl = document.createElement("label");
+const opacitySlider = document.createElement("input");
+opacitySlider.type = "range";
+opacitySlider.min = "0";
+opacitySlider.max = "1";
+opacitySlider.step = "0.01";
+opacitySlider.value = "0.5";
+opacitySlider.setAttribute("aria-label", "Model opacity");
+const opacityValue = document.createElement("output");
+opacityValue.value = "50%";
+opacityValue.textContent = opacityValue.value;
+opacityControl.append("Model opacity", opacitySlider, opacityValue);
+
 const status = document.createElement("p");
 status.className = "status";
 status.setAttribute("aria-live", "polite");
@@ -54,6 +67,7 @@ app.append(
   fitButton,
   projectionSelect,
   lightingControl,
+  opacityControl,
   status,
   selectionStatus,
   viewport,
@@ -73,6 +87,11 @@ projectionSelect.addEventListener("change", () => {
 });
 lightingToggle.addEventListener("change", () => {
   renderer.setShadingMode(lightingToggle.checked ? "original" : "flat");
+});
+opacitySlider.addEventListener("input", () => {
+  renderer.setOpacity(Number(opacitySlider.value));
+  opacityValue.value = `${Math.round(Number(opacitySlider.value) * 100)}%`;
+  opacityValue.textContent = opacityValue.value;
 });
 
 fileInput.addEventListener("change", async () => {
