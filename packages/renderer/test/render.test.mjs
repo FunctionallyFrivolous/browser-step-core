@@ -6,6 +6,7 @@ import {
   fitCameraToBounds,
   fitOrthographicCameraToBounds,
   PointerGestureTracker,
+  raycastFaceIndex,
   setGeometryGroupShading,
   updateFaceSelection,
 } from "../src/index.ts";
@@ -72,6 +73,35 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(boundary.geometry.getAttribute("position").count, 6);
   assert.equal(boundary.visible, true);
   assert.equal(boundary.material.color.getHex(), 0x000000);
+
+  disposeGroup(group);
+});
+
+test("ignores nearby boundary lines when picking faces", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const raycaster = new THREE.Raycaster(
+    new THREE.Vector3(0.9, 0.9, 2),
+    new THREE.Vector3(0, 0, -1),
+  );
+
+  assert.ok(
+    raycaster
+      .intersectObject(group, true)
+      .some((hit) => hit.object instanceof THREE.LineSegments),
+  );
+  assert.equal(raycastFaceIndex(raycaster, group), undefined);
+
+  raycaster.set(
+    new THREE.Vector3(0.2, 0.2, 2),
+    new THREE.Vector3(0, 0, -1),
+  );
+  assert.equal(raycastFaceIndex(raycaster, group), 4);
 
   disposeGroup(group);
 });

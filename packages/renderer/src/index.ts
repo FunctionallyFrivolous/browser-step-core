@@ -257,6 +257,23 @@ export function updateFaceSelection(
   return nextSelection;
 }
 
+export function raycastFaceIndex(
+  raycaster: THREE.Raycaster,
+  group: THREE.Group,
+): number | undefined {
+  const faceMeshes: THREE.Mesh[] = [];
+  group.traverse((object) => {
+    if (
+      object instanceof THREE.Mesh &&
+      typeof object.userData.faceIndex === "number"
+    ) {
+      faceMeshes.push(object);
+    }
+  });
+
+  return raycaster.intersectObjects(faceMeshes)[0]?.object.userData.faceIndex;
+}
+
 function disposeGeometryGroup(group: THREE.Group): void {
   const materials = new Set<THREE.Material>();
 
@@ -423,10 +440,7 @@ export function createStepRenderer(
     pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
 
-    const intersection = raycaster
-      .intersectObject(geometryGroup, true)
-      .find((hit) => typeof hit.object.userData.faceIndex === "number");
-    selectFace(intersection?.object.userData.faceIndex);
+    selectFace(raycastFaceIndex(raycaster, geometryGroup));
   };
 
   const handlePointerDown = (event: PointerEvent) => {
