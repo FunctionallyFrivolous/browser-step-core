@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@browser-step/kernel": "*",
+    "@browser-step/core": "*",
     "@browser-step/renderer": "*"
   }
 }

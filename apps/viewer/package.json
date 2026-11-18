@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@browser-step/core": "*",
-    "@browser-step/kernel": "*",
     "@browser-step/renderer": "*"
   }
 }
