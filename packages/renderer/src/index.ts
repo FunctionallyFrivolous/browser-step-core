@@ -36,8 +36,15 @@ export function createCameraFromViewState(
   state: ViewState,
   aspect: number,
 ): THREE.PerspectiveCamera | THREE.OrthographicCamera {
+  const distance = new THREE.Vector3().fromArray(state.position)
+    .distanceTo(new THREE.Vector3().fromArray(state.target));
   const camera = state.projection === "perspective"
-    ? new THREE.PerspectiveCamera(45, aspect, state.near, state.far)
+    ? new THREE.PerspectiveCamera(
+      THREE.MathUtils.radToDeg(2 * Math.atan(state.verticalSpan / (2 * distance))),
+      aspect,
+      state.near,
+      state.far,
+    )
     : new THREE.OrthographicCamera(
       -state.verticalSpan * aspect / 2,
       state.verticalSpan * aspect / 2,
@@ -50,6 +57,28 @@ export function createCameraFromViewState(
   camera.lookAt(...state.target);
   camera.updateProjectionMatrix();
   return camera;
+}
+
+export function switchCameraProjection(
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
+  target: THREE.Vector3,
+  projection: CameraProjection,
+  aspect: number,
+): THREE.PerspectiveCamera | THREE.OrthographicCamera {
+  const state = getCameraViewState(camera, target);
+  if (state.projection === projection) return camera;
+  if (projection === "perspective") {
+    const direction = camera.position.clone().sub(target).normalize();
+    const distance = camera.position.distanceTo(target);
+    const perspectiveDistance =
+      state.verticalSpan / (2 * Math.tan(THREE.MathUtils.degToRad(45) / 2));
+    const distanceChange = perspectiveDistance - distance;
+    state.position = target.clone().add(direction.multiplyScalar(perspectiveDistance)).toArray();
+    state.near = Math.max(0.001, state.near + distanceChange);
+    state.far = Math.max(state.near + 0.001, state.far + distanceChange);
+  }
+  state.projection = projection;
+  return createCameraFromViewState(state, aspect);
 }
 
 export class PointerGestureTracker {
@@ -634,36 +663,9 @@ export function createStepRenderer(
     }
 
     const target = controls.target.clone();
-    const direction = camera.position.clone().sub(target);
-    if (direction.lengthSq() === 0) direction.set(1.8, 1.8, 2.4);
-    direction.normalize();
-    const distance = Math.max(camera.position.distanceTo(target), 0.01);
-    const verticalSpan =
-      camera instanceof THREE.OrthographicCamera
-        ? (camera.top - camera.bottom) / camera.zoom
-        : 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.getEffectiveFOV()) / 2);
-    const { near, far } = camera;
-
+    const nextCamera = switchCameraProjection(camera, target, projection, aspect);
     controls.dispose();
-    if (wantsPerspective) {
-      const perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, near, far);
-      const perspectiveDistance =
-        verticalSpan / (2 * Math.tan(THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2));
-      perspectiveCamera.position.copy(target).add(direction.multiplyScalar(perspectiveDistance));
-      camera = perspectiveCamera;
-    } else {
-      const orthographicCamera = new THREE.OrthographicCamera(
-        -(verticalSpan * aspect) / 2,
-        (verticalSpan * aspect) / 2,
-        verticalSpan / 2,
-        -verticalSpan / 2,
-        near,
-        far,
-      );
-      orthographicCamera.position.copy(camera.position);
-      camera = orthographicCamera;
-    }
-
+    camera = nextCamera;
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.target.copy(target);
@@ -678,7 +680,6 @@ export function createStepRenderer(
     controls.enableDamping = true;
     controls.target.fromArray(state.target);
     controls.update();
-    onViewChange(getCameraViewState(camera, controls.target));
   };
 
   const setShadingMode = (nextShadingMode: ShadingMode) => {

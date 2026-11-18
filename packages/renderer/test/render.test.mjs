@@ -14,6 +14,7 @@ import {
   setGeometryGroupShading,
   setGeometryGroupSmoothEdgesVisible,
   setGeometryGroupSelection,
+  switchCameraProjection,
 } from "../src/index.ts";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { ViewStateModel } from "../../core/src/index.ts";
@@ -39,8 +40,8 @@ test("restores shared camera views including orthographic zoom and clipping", ()
   assert.deepEqual(getCameraViewState(restored, target), view.state);
 });
 
-test("restores a perspective view with its position, target, and clipping", () => {
-  const camera = new THREE.PerspectiveCamera(45, 2, 0.2, 500);
+test("restores a perspective view with its position, target, scale, and clipping", () => {
+  const camera = new THREE.PerspectiveCamera(20, 2, 0.2, 500);
   camera.position.set(6, 8, 12);
   const target = new THREE.Vector3(1, 2, 3);
   const state = getCameraViewState(camera, target);
@@ -48,7 +49,33 @@ test("restores a perspective view with its position, target, and clipping", () =
 
   assert.ok(restored instanceof THREE.PerspectiveCamera);
   assert.equal(restored.aspect, 1.5);
-  assert.deepEqual(getCameraViewState(restored, target), state);
+  const restoredState = getCameraViewState(restored, target);
+  assert.ok(Math.abs(restoredState.verticalSpan - state.verticalSpan) < 1e-10);
+  assert.deepEqual({ ...restoredState, verticalSpan: state.verticalSpan }, state);
+});
+
+test("switches projection without clipping a zoomed-out fitted view", () => {
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
+  camera.position.set(6, 8, 12);
+  const target = new THREE.Vector3();
+  const bounds = new THREE.Box3(
+    new THREE.Vector3(-1, -1, -1),
+    new THREE.Vector3(1, 1, 1),
+  );
+  fitOrthographicCameraToBounds(camera, bounds, target, 1);
+  camera.zoom = 0.02;
+  const span = getCameraViewState(camera, target).verticalSpan;
+  const perspective = switchCameraProjection(camera, target, "perspective", 1);
+  const distance = perspective.position.distanceTo(target);
+  const radius = bounds.getBoundingSphere(new THREE.Sphere()).radius;
+
+  assert.ok(perspective instanceof THREE.PerspectiveCamera);
+  assert.ok(perspective.far > distance + radius);
+  assert.ok(perspective.near < distance - radius);
+  assert.ok(Math.abs(getCameraViewState(perspective, target).verticalSpan - span) < 1e-10);
+  const orthographic = switchCameraProjection(perspective, target, "orthographic", 1);
+  assert.ok(orthographic instanceof THREE.OrthographicCamera);
+  assert.ok(Math.abs(getCameraViewState(orthographic, target).verticalSpan - span) < 1e-10);
 });
 
 function disposeGroup(group) {
