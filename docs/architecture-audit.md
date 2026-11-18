@@ -66,3 +66,25 @@ This audit compares the current implementation with the project goals and intend
 ### Recommendation
 
 **B) Create the second application now and use it to validate the framework**, as a deliberately small validation exercise rather than a broad feature project. The existing kernel and renderer packages provide enough to test real reuse, while the empty core package and renderer-owned selection/presentation state make the framework boundaries uncertain. Have the second app consume shared packages only, record any duplicated or viewer-specific dependencies, and extract abstractions only where that exercise demonstrates a genuine cross-application need. This should validate the platform structure before more functionality makes the current boundaries harder to change.
+
+## Inspector Application Findings
+
+The inspector is a separate Vite application that consumes `@browser-step/kernel`
+and `@browser-step/renderer` directly. It does not import from the viewer or use
+viewer-specific controls. It validates STEP loading, body/face counts, rendering,
+and face selection through the existing shared package APIs.
+
+The viewer and inspector both coordinate the same application workflow: read a
+selected file, disable the picker while loading, load it through the kernel,
+render the resulting tessellation, report body/face counts, and display
+selection feedback. The surrounding UI differs, so file-input handling and
+presentation should remain app-owned. If more apps need this workflow, `core`
+should provide a small model-loading/session abstraction that exposes a loaded
+model's counts and tessellation without knowing about the DOM or Three.js.
+
+Selection highlighting and picking are already shared through the renderer
+package, but selection state remains coupled to Three.js. If applications need
+selection independently of rendering, a renderer-neutral selection model is a
+candidate for `core`; the inspector does not justify extracting it yet. Face
+indices are traversal-based and transient, so any shared selection API must not
+present them as durable topology identifiers.
