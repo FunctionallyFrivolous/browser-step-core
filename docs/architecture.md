@@ -50,6 +50,15 @@ Before selecting either candidate, pin an exact release and verify the package a
 - Measure compressed production assets, startup time, memory use, and repeated-operation stability.
 - Review wrapper, OCCT, and generated-artifact licensing for the pinned build before distribution.
 
+## Framework Validation
+
+Goal:
+
+Prove a second application can be built
+using shared packages without depending
+on viewer-specific implementation.
+
+
 ## Sources
 
 - [OpenCascade.js repository](https://github.com/donalffons/opencascade.js/) — build approach, current documented OCCT version, examples, and license.
