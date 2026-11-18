@@ -20,6 +20,65 @@ export interface ViewState {
   far: number;
 }
 
+export interface StyleState {
+  faceColor: number;
+  opacity: number;
+  visible: boolean;
+}
+
+function copyStyleState(state: StyleState): StyleState {
+  return { ...state };
+}
+
+function validateStyleState(state: StyleState): void {
+  if (
+    !Number.isInteger(state.faceColor) ||
+    state.faceColor < 0 ||
+    state.faceColor > 0xffffff ||
+    !Number.isFinite(state.opacity) ||
+    state.opacity < 0 ||
+    state.opacity > 1 ||
+    typeof state.visible !== "boolean"
+  ) {
+    throw new Error("Invalid style state.");
+  }
+}
+
+export class StyleStateModel {
+  private current: StyleState;
+  private readonly listeners = new Set<(state: StyleState) => void>();
+
+  constructor(initial: StyleState = {
+    faceColor: 0x9caec2,
+    opacity: 0.5,
+    visible: true,
+  }) {
+    validateStyleState(initial);
+    this.current = copyStyleState(initial);
+  }
+
+  get state(): StyleState {
+    return copyStyleState(this.current);
+  }
+
+  setState(state: StyleState): void {
+    validateStyleState(state);
+    if (
+      state.faceColor === this.current.faceColor &&
+      state.opacity === this.current.opacity &&
+      state.visible === this.current.visible
+    ) return;
+
+    this.current = copyStyleState(state);
+    for (const listener of this.listeners) listener(this.state);
+  }
+
+  subscribe(listener: (state: StyleState) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+}
+
 function copyViewState(state: ViewState): ViewState {
   return { ...state, position: [...state.position], target: [...state.target] };
 }

@@ -3,7 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
-import type { CameraProjection, ViewState } from "@browser-step/core";
+import type { CameraProjection, StyleState, ViewState } from "@browser-step/core";
 
 export interface TriangleMesh {
   positions: Float32Array;
@@ -394,6 +394,7 @@ export function createGeometryGroup(
 
   group.userData.edgeThickness = clampedEdgeThickness;
   group.userData.showSmoothEdges = showSmoothEdges;
+  group.userData.faceColor = FACE_COLOR;
   return group;
 }
 
@@ -425,7 +426,7 @@ function createFaceMaterial(
 export function setGeometryGroupShading(
   group: THREE.Group,
   shadingMode: ShadingMode,
-  opacity = DEFAULT_FACE_OPACITY,
+  opacity?: number,
 ): void {
   group.traverse((object) => {
     if (!(object instanceof THREE.Mesh)) return;
@@ -439,7 +440,11 @@ export function setGeometryGroupShading(
     }
 
     const color = previousMaterial.color.getHex();
-    object.material = createFaceMaterial(shadingMode, color, opacity);
+    object.material = createFaceMaterial(
+      shadingMode,
+      color,
+      opacity ?? previousMaterial.opacity,
+    );
     previousMaterial.dispose();
   });
 }
@@ -458,6 +463,29 @@ export function setGeometryGroupOpacity(group: THREE.Group, opacity: number): vo
         material instanceof THREE.MeshStandardMaterial
       ) {
         material.opacity = clampedOpacity;
+      }
+    }
+  });
+}
+
+export function setGeometryGroupStyle(group: THREE.Group, style: StyleState): void {
+  group.userData.faceColor = style.faceColor;
+  group.visible = style.visible;
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || object.userData.isEdgeLine) return;
+
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    for (const material of materials) {
+      if (
+        material instanceof THREE.MeshBasicMaterial ||
+        material instanceof THREE.MeshStandardMaterial
+      ) {
+        material.color.set(
+          object.userData.isSelected ? SELECTED_FACE_COLOR : style.faceColor,
+        );
+        material.opacity = style.opacity;
       }
     }
   });
@@ -516,10 +544,11 @@ export function setGeometryGroupSelection(
     const material = object.material as
       | THREE.MeshBasicMaterial
       | THREE.MeshStandardMaterial;
+    object.userData.isSelected = selectedFaceIndices.has(object.userData.faceIndex);
     material.color.set(
-      selectedFaceIndices.has(object.userData.faceIndex)
+      object.userData.isSelected
         ? SELECTED_FACE_COLOR
-        : FACE_COLOR,
+        : group.userData.faceColor ?? FACE_COLOR,
     );
   });
 }
@@ -528,6 +557,8 @@ export function raycastFaceIndex(
   raycaster: THREE.Raycaster,
   group: THREE.Group,
 ): number | undefined {
+  if (!group.visible) return undefined;
+
   const faceMeshes: THREE.Mesh[] = [];
   group.traverse((object) => {
     if (
@@ -563,13 +594,13 @@ export function createStepRenderer(
   onPick: (faceIndex: number | undefined) => void = () => {},
   onViewChange: (state: ViewState) => void = () => {},
 ): {
-  renderMeshes(meshes: TriangleMesh[]): void;
+  renderMeshes(meshes: TriangleMesh[], style: StyleState): void;
   setSelectedFaces(faceIndices: readonly number[]): void;
+  setStyleState(style: StyleState): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
   setViewState(state: ViewState): void;
   setShadingMode(shadingMode: ShadingMode): void;
-  setOpacity(opacity: number): void;
   setEdgeThickness(edgeThickness: number): void;
   setShowSmoothEdges(showSmoothEdges: boolean): void;
   dispose(): void;
@@ -598,7 +629,6 @@ export function createStepRenderer(
   controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
   let shadingMode: ShadingMode = "flat";
-  let faceOpacity = DEFAULT_FACE_OPACITY;
   let edgeThickness = 1;
   let showSmoothEdges = true;
   let animationFrame = 0;
@@ -689,14 +719,12 @@ export function createStepRenderer(
       setGeometryGroupShading(
         geometryGroup,
         shadingMode,
-        faceOpacity,
       );
     }
   };
 
-  const setOpacity = (opacity: number) => {
-    faceOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
-    if (geometryGroup) setGeometryGroupOpacity(geometryGroup, faceOpacity);
+  const setStyleState = (style: StyleState) => {
+    if (geometryGroup) setGeometryGroupStyle(geometryGroup, style);
   };
 
   const setEdgeThickness = (nextEdgeThickness: number) => {
@@ -751,7 +779,7 @@ export function createStepRenderer(
     if (event.key === "Escape") onPick(undefined);
   };
 
-  const renderMeshes = (meshes: TriangleMesh[]) => {
+  const renderMeshes = (meshes: TriangleMesh[], style: StyleState) => {
     if (geometryGroup) {
       scene.remove(geometryGroup);
       disposeGeometryGroup(geometryGroup);
@@ -760,10 +788,11 @@ export function createStepRenderer(
     geometryGroup = createGeometryGroup(
       meshes,
       shadingMode,
-      faceOpacity,
+      DEFAULT_FACE_OPACITY,
       edgeThickness,
       showSmoothEdges,
     );
+    setGeometryGroupStyle(geometryGroup, style);
     scene.add(geometryGroup);
     geometryGroup.traverse((object) => {
       if (object instanceof THREE.Mesh && object.userData.isEdgeLine) {
@@ -793,7 +822,7 @@ export function createStepRenderer(
     setProjection,
     setViewState,
     setShadingMode,
-    setOpacity,
+    setStyleState,
     setEdgeThickness,
     setShowSmoothEdges,
     dispose() {

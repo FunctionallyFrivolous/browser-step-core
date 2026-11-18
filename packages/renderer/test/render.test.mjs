@@ -12,6 +12,7 @@ import {
   setGeometryGroupEdgeThickness,
   setGeometryGroupOpacity,
   setGeometryGroupShading,
+  setGeometryGroupStyle,
   setGeometryGroupSmoothEdgesVisible,
   setGeometryGroupSelection,
   switchCameraProjection,
@@ -203,6 +204,8 @@ test("ignores nearby boundary lines when picking faces", () => {
     new THREE.Vector3(0, 0, -1),
   );
   assert.equal(raycastFaceIndex(raycaster, group), 4);
+  group.visible = false;
+  assert.equal(raycastFaceIndex(raycaster, group), undefined);
 
   disposeGroup(group);
 });
@@ -268,6 +271,41 @@ test("sets opacity on all face meshes without changing boundary overlays", () =>
   disposeGroup(group);
 });
 
+test("applies shared face color, opacity, and visibility while preserving selection", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+    {
+      faceIndex: 5,
+      positions: new Float32Array([0, 0, 1, 1, 0, 1, 0, 1, 1]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const faces = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  const boundaries = getBoundaryLines(group);
+  setGeometryGroupSelection(group, new Set([4]));
+
+  setGeometryGroupStyle(group, {
+    faceColor: 0x123456,
+    opacity: 0.25,
+    visible: false,
+  });
+
+  assert.equal(group.visible, false);
+  assert.equal(faces[0].material.color.getHex(), 0xffc7c7);
+  assert.equal(faces[0].material.opacity, 0.25);
+  assert.equal(faces[1].material.color.getHex(), 0x123456);
+  assert.equal(faces[1].material.opacity, 0.25);
+  assert.ok(boundaries.every((boundary) => boundary.material.opacity === 1));
+
+  disposeGroup(group);
+});
+
 test("clamps face opacity and preserves it when switching shading", () => {
   const group = createGeometryGroup([
     {
@@ -286,6 +324,10 @@ test("clamps face opacity and preserves it when switching shading", () => {
 
   setGeometryGroupShading(group, "flat", 0.25);
   assert.equal(mesh.material.opacity, 0.25);
+
+  setGeometryGroupOpacity(group, 0.3);
+  setGeometryGroupShading(group, "original");
+  assert.equal(mesh.material.opacity, 0.3);
 
   disposeGroup(group);
 });

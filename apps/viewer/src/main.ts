@@ -1,4 +1,10 @@
-import { CommandManager, ModelSession, SelectionModel, ViewStateModel } from "@browser-step/core";
+import {
+  CommandManager,
+  ModelSession,
+  SelectionModel,
+  StyleStateModel,
+  ViewStateModel,
+} from "@browser-step/core";
 import { createStepRenderer, type CameraProjection } from "@browser-step/renderer";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -34,6 +40,18 @@ const lightingControl = document.createElement("label");
 const lightingToggle = document.createElement("input");
 lightingToggle.type = "checkbox";
 lightingControl.append(lightingToggle, "Use original scene lighting");
+
+const faceColorControl = document.createElement("label");
+const faceColorInput = document.createElement("input");
+faceColorInput.type = "color";
+faceColorInput.setAttribute("aria-label", "Face color");
+faceColorControl.append("Face color", faceColorInput);
+
+const visibilityControl = document.createElement("label");
+const visibilityToggle = document.createElement("input");
+visibilityToggle.type = "checkbox";
+visibilityToggle.checked = true;
+visibilityControl.append(visibilityToggle, "Show model");
 
 const opacityControl = document.createElement("label");
 const opacitySlider = document.createElement("input");
@@ -91,6 +109,8 @@ app.append(
   fitButton,
   projectionSelect,
   lightingControl,
+  faceColorControl,
+  visibilityControl,
   opacityControl,
   edgeThicknessControl,
   smoothEdgesControl,
@@ -102,6 +122,7 @@ app.append(
 const session = new ModelSession();
 const commandManager = new CommandManager();
 const selection = new SelectionModel();
+const style = new StyleStateModel();
 const view = new ViewStateModel();
 let updatingViewFromRenderer = false;
 const renderer = createStepRenderer(viewport, (faceIndex) => {
@@ -120,6 +141,20 @@ view.subscribe((state) => {
   if (!updatingViewFromRenderer) renderer.setViewState(state);
 });
 renderer.setViewState(view.state);
+style.subscribe((state) => {
+  faceColorInput.value = `#${state.faceColor.toString(16).padStart(6, "0")}`;
+  opacitySlider.value = String(state.opacity);
+  opacityValue.value = `${Math.round(state.opacity * 100)}%`;
+  opacityValue.textContent = opacityValue.value;
+  visibilityToggle.checked = state.visible;
+  renderer.setStyleState(state);
+});
+const initialStyle = style.state;
+faceColorInput.value = `#${initialStyle.faceColor.toString(16).padStart(6, "0")}`;
+opacitySlider.value = String(initialStyle.opacity);
+opacityValue.value = `${Math.round(initialStyle.opacity * 100)}%`;
+opacityValue.textContent = opacityValue.value;
+renderer.setStyleState(initialStyle);
 selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
   const count = selectedFaceIndices.length;
@@ -135,10 +170,17 @@ projectionSelect.addEventListener("change", () => {
 lightingToggle.addEventListener("change", () => {
   renderer.setShadingMode(lightingToggle.checked ? "original" : "flat");
 });
+faceColorInput.addEventListener("input", () => {
+  style.setState({
+    ...style.state,
+    faceColor: Number.parseInt(faceColorInput.value.slice(1), 16),
+  });
+});
+visibilityToggle.addEventListener("change", () => {
+  style.setState({ ...style.state, visible: visibilityToggle.checked });
+});
 opacitySlider.addEventListener("input", () => {
-  renderer.setOpacity(Number(opacitySlider.value));
-  opacityValue.value = `${Math.round(Number(opacitySlider.value) * 100)}%`;
-  opacityValue.textContent = opacityValue.value;
+  style.setState({ ...style.state, opacity: Number(opacitySlider.value) });
 });
 edgeThicknessSlider.addEventListener("input", () => {
   const thickness = Number(edgeThicknessSlider.value);
@@ -166,7 +208,7 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     await session.load(await readData());
     const meshes = session.tessellation;
     selection.clear();
-    renderer.renderMeshes(meshes);
+    renderer.renderMeshes(meshes, style.state);
     fitButton.disabled = false;
     status.textContent =
       `${name} — ${session.bodyCount} bodies, ${session.faceCount} faces`;

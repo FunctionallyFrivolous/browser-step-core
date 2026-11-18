@@ -1,6 +1,43 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { ViewStateModel } from "../src/index.ts";
+import { StyleStateModel, ViewStateModel } from "../src/index.ts";
+
+test("tracks style snapshots and notifies subscribers only for valid changes", () => {
+  const style = new StyleStateModel();
+  const initial = style.state;
+  const events = [];
+  style.subscribe((state) => { state.faceColor = 0; });
+  const unsubscribe = style.subscribe((state) => events.push(state));
+  const next = { faceColor: 0x123456, opacity: 0.25, visible: false };
+
+  style.setState(next);
+  next.faceColor = 0;
+  style.state.opacity = 1;
+  style.setState(style.state);
+  unsubscribe();
+  style.setState(initial);
+
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0], { faceColor: 0x123456, opacity: 0.25, visible: false });
+  assert.deepEqual(style.state, initial);
+});
+
+test("rejects invalid style state without changing the current style", () => {
+  const style = new StyleStateModel();
+  const initial = style.state;
+  for (const invalid of [
+    { ...initial, faceColor: -1 },
+    { ...initial, faceColor: 0x1000000 },
+    { ...initial, faceColor: 1.5 },
+    { ...initial, opacity: NaN },
+    { ...initial, opacity: -0.1 },
+    { ...initial, opacity: 1.1 },
+    { ...initial, visible: "false" },
+  ]) {
+    assert.throws(() => style.setState(invalid), /Invalid style state/);
+    assert.deepEqual(style.state, initial);
+  }
+});
 
 test("tracks independent view snapshots and notifies subscribers of changes", () => {
   const view = new ViewStateModel();

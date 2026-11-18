@@ -1,4 +1,4 @@
-import { ModelSession, SelectionModel } from "@browser-step/core";
+import { ModelSession, SelectionModel, StyleStateModel } from "@browser-step/core";
 import { createStepRenderer } from "@browser-step/renderer";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -37,6 +37,7 @@ app.append(heading, fileInput, fitButton, status, selectionStatus, viewport);
 
 const session = new ModelSession();
 const selection = new SelectionModel();
+const style = new StyleStateModel();
 const renderer = createStepRenderer(viewport, (faceIndex) => {
   if (faceIndex === undefined) selection.clear();
   else selection.toggle(faceIndex);
@@ -65,7 +66,7 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     await session.load(await readData());
     const meshes = session.tessellation;
     selection.clear();
-    renderer.renderMeshes(meshes);
+    renderer.renderMeshes(meshes, style.state);
     fitButton.disabled = false;
     status.textContent =
       `${name} — ${session.bodyCount} bodies, ${session.faceCount} faces`;
