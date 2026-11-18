@@ -1,5 +1,5 @@
 import { LibcascadeKernel } from "@browser-step/kernel";
-import { createStepRenderer } from "@browser-step/renderer";
+import { createStepRenderer, type CameraProjection } from "@browser-step/renderer";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -20,6 +20,16 @@ fitButton.type = "button";
 fitButton.textContent = "Fit model to view";
 fitButton.disabled = true;
 
+const projectionSelect = document.createElement("select");
+projectionSelect.setAttribute("aria-label", "Camera projection");
+for (const projection of ["orthographic", "perspective"] as const) {
+  const option = document.createElement("option");
+  option.value = projection;
+  option.textContent = `${projection[0].toUpperCase()}${projection.slice(1)}`;
+  projectionSelect.append(option);
+}
+projectionSelect.value = "orthographic";
+
 const status = document.createElement("p");
 status.className = "status";
 status.setAttribute("aria-live", "polite");
@@ -33,7 +43,7 @@ selectionStatus.textContent = "0 faces selected";
 const viewport = document.createElement("div");
 viewport.className = "viewport";
 
-app.append(heading, fileInput, fitButton, status, selectionStatus, viewport);
+app.append(heading, fileInput, fitButton, projectionSelect, status, selectionStatus, viewport);
 
 const kernel = new LibcascadeKernel();
 const renderer = createStepRenderer(viewport, (selectedFaceIndices) => {
@@ -42,6 +52,11 @@ const renderer = createStepRenderer(viewport, (selectedFaceIndices) => {
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
+projectionSelect.addEventListener("change", () => {
+  const projection: CameraProjection =
+    projectionSelect.value === "perspective" ? "perspective" : "orthographic";
+  renderer.setProjection(projection);
+});
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
