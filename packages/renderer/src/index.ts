@@ -215,6 +215,7 @@ function createFaceMaterial(
       side: THREE.DoubleSide,
       transparent: true,
       opacity,
+      depthWrite: false,
     });
   }
   return new THREE.MeshStandardMaterial({
@@ -224,6 +225,7 @@ function createFaceMaterial(
     side: THREE.DoubleSide,
     transparent: true,
     opacity,
+    depthWrite: false,
   });
 }
 
