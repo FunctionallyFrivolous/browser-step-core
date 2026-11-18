@@ -6,10 +6,11 @@
     "packages/core",
     "packages/renderer",
     "packages/kernel",
-    "apps/viewer"
+    "apps/viewer",
+    "apps/inspector"
   ],
   "scripts": {
-    "build": "npm run typecheck && npm run build --workspace @browser-step/viewer",
+    "build": "npm run typecheck && npm run build --workspace @browser-step/viewer && npm run build --workspace @browser-step/inspector",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

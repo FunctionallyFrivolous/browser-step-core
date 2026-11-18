@@ -9,6 +9,7 @@
   },
   "include": [
     "apps/viewer/src",
+    "apps/inspector/src",
     "packages/*/src"
   ]
 }

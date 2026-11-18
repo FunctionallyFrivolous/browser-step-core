@@ -1,4 +1,4 @@
-name: Deploy viewer
+name: Deploy apps
 
 on:
   push:
@@ -35,9 +35,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - name: Assemble Pages site
+        run: |
+          mkdir -p pages/inspector
+          cp -R apps/viewer/dist/. pages/
+          cp -R apps/inspector/dist/. pages/inspector/
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: apps/viewer/dist
+          path: pages
 
   deploy:
     environment:
