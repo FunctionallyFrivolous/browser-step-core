@@ -360,14 +360,14 @@ export function createGeometryGroup(
           color: EDGE_COLOR,
           linewidth: clampedEdgeThickness,
           transparent: true,
-          depthTest: false,
+          depthTest: true,
           depthWrite: false,
         }),
       );
       boundary.userData.isEdgeLine = true;
       boundary.userData.faceIndex = mesh.faceIndex;
       boundary.userData.isSmoothEdge = isSmooth;
-      boundary.renderOrder = 1;
+      boundary.renderOrder = 0;
       updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
       group.add(boundary);
 
@@ -407,9 +407,12 @@ function createFaceMaterial(
     return new THREE.MeshBasicMaterial({
       color,
       side: THREE.DoubleSide,
-      transparent: true,
+      transparent: opacity < 1,
       opacity,
-      depthWrite: false,
+      depthWrite: opacity >= 1,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1,
     });
   }
   return new THREE.MeshStandardMaterial({
@@ -417,10 +420,22 @@ function createFaceMaterial(
     metalness: 0.1,
     roughness: 0.65,
     side: THREE.DoubleSide,
-    transparent: true,
+    transparent: opacity < 1,
     opacity,
-    depthWrite: false,
+    depthWrite: opacity >= 1,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
   });
+}
+
+function setFaceMaterialOpacity(
+  material: THREE.MeshBasicMaterial | THREE.MeshStandardMaterial,
+  opacity: number,
+): void {
+  material.opacity = opacity;
+  material.transparent = opacity < 1;
+  material.depthWrite = opacity >= 1;
 }
 
 export function setGeometryGroupShading(
@@ -462,7 +477,7 @@ export function setGeometryGroupOpacity(group: THREE.Group, opacity: number): vo
         material instanceof THREE.MeshBasicMaterial ||
         material instanceof THREE.MeshStandardMaterial
       ) {
-        material.opacity = clampedOpacity;
+        setFaceMaterialOpacity(material, clampedOpacity);
       }
     }
   });
@@ -485,7 +500,7 @@ export function setGeometryGroupStyle(group: THREE.Group, style: StyleState): vo
         material.color.set(
           object.userData.isSelected ? SELECTED_FACE_COLOR : style.faceColor,
         );
-        material.opacity = style.opacity;
+        setFaceMaterialOpacity(material, style.opacity);
       }
     }
   });
