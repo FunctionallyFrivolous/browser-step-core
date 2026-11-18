@@ -7,6 +7,8 @@ export interface TriangleMesh {
   faceIndex: number;
 }
 
+export type CameraProjection = "orthographic" | "perspective";
+
 export class PointerGestureTracker {
   private readonly pointerStarts = new Map<
     number,
@@ -65,6 +67,33 @@ export function fitCameraToBounds(
 
   target.copy(center);
   camera.position.copy(center).add(direction.multiplyScalar(distance));
+  camera.near = Math.max(radius / 1000, 0.001);
+  camera.far = radius * 100;
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+}
+
+export function fitOrthographicCameraToBounds(
+  camera: THREE.OrthographicCamera,
+  bounds: THREE.Box3,
+  target: THREE.Vector3,
+  aspect: number,
+): void {
+  if (bounds.isEmpty()) return;
+
+  const center = bounds.getCenter(new THREE.Vector3());
+  const radius = Math.max(bounds.getBoundingSphere(new THREE.Sphere()).radius, 0.01);
+  const direction = camera.position.clone().sub(target);
+  if (direction.lengthSq() === 0) direction.set(1.8, 1.8, 2.4);
+  direction.normalize();
+
+  const verticalSpan = (radius * 2.3) / Math.min(aspect, 1);
+  camera.left = -(verticalSpan * aspect) / 2;
+  camera.right = (verticalSpan * aspect) / 2;
+  camera.top = verticalSpan / 2;
+  camera.bottom = -verticalSpan / 2;
+  target.copy(center);
+  camera.position.copy(center).add(direction.multiplyScalar(radius * 3));
   camera.near = Math.max(radius / 1000, 0.001);
   camera.far = radius * 100;
   camera.lookAt(center);
@@ -206,13 +235,17 @@ export function createStepRenderer(
 ): {
   renderMeshes(meshes: TriangleMesh[]): void;
   fitToView(): void;
+  setProjection(projection: CameraProjection): void;
   getSelectedFaces(): number[];
   dispose(): void;
 } {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xf1f3f5);
 
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100000);
+  let aspect = 1;
+  let camera: THREE.PerspectiveCamera | THREE.OrthographicCamera =
+    new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
+  camera.position.set(1.8, 1.8, 2.4);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -223,7 +256,10 @@ export function createStepRenderer(
   light.position.set(1, 2, 3);
   scene.add(light);
 
-  const controls = new OrbitControls(camera, renderer.domElement);
+  let controls: OrbitControls<THREE.Camera> = new OrbitControls(
+    camera,
+    renderer.domElement,
+  );
   controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
   let selectedFaceIndices = new Set<number>();
@@ -236,7 +272,20 @@ export function createStepRenderer(
     const width = Math.max(container.clientWidth, 1);
     const height = Math.max(container.clientHeight, 1);
     renderer.setSize(width, height);
-    camera.aspect = width / height;
+    aspect = width / height;
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.aspect = aspect;
+    } else if (camera instanceof THREE.OrthographicCamera) {
+      const verticalSpan = Math.max(
+        camera.top - camera.bottom,
+        (camera.right - camera.left) / aspect,
+      );
+      const horizontalSpan = verticalSpan * aspect;
+      camera.top = verticalSpan / 2;
+      camera.bottom = -verticalSpan / 2;
+      camera.left = -horizontalSpan / 2;
+      camera.right = horizontalSpan / 2;
+    }
     camera.updateProjectionMatrix();
   };
 
@@ -250,7 +299,56 @@ export function createStepRenderer(
     if (!geometryGroup) return;
 
     const bounds = new THREE.Box3().setFromObject(geometryGroup);
-    fitCameraToBounds(camera, bounds, controls.target);
+    if (camera instanceof THREE.PerspectiveCamera) {
+      fitCameraToBounds(camera, bounds, controls.target);
+    } else if (camera instanceof THREE.OrthographicCamera) {
+      fitOrthographicCameraToBounds(camera, bounds, controls.target, aspect);
+    }
+    controls.update();
+  };
+
+  const setProjection = (projection: CameraProjection) => {
+    const wantsPerspective = projection === "perspective";
+    if (
+      (wantsPerspective && camera instanceof THREE.PerspectiveCamera) ||
+      (!wantsPerspective && camera instanceof THREE.OrthographicCamera)
+    ) {
+      return;
+    }
+
+    const target = controls.target.clone();
+    const direction = camera.position.clone().sub(target);
+    if (direction.lengthSq() === 0) direction.set(1.8, 1.8, 2.4);
+    direction.normalize();
+    const distance = Math.max(camera.position.distanceTo(target), 0.01);
+    const verticalSpan =
+      camera instanceof THREE.OrthographicCamera
+        ? camera.top - camera.bottom
+        : 2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+
+    controls.dispose();
+    if (wantsPerspective) {
+      const perspectiveCamera = new THREE.PerspectiveCamera(45, aspect, 0.01, 100000);
+      const perspectiveDistance =
+        verticalSpan / (2 * Math.tan(THREE.MathUtils.degToRad(perspectiveCamera.fov) / 2));
+      perspectiveCamera.position.copy(target).add(direction.multiplyScalar(perspectiveDistance));
+      camera = perspectiveCamera;
+    } else {
+      const orthographicCamera = new THREE.OrthographicCamera(
+        -(verticalSpan * aspect) / 2,
+        (verticalSpan * aspect) / 2,
+        verticalSpan / 2,
+        -verticalSpan / 2,
+        0.01,
+        100000,
+      );
+      orthographicCamera.position.copy(camera.position);
+      camera = orthographicCamera;
+    }
+
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.copy(target);
     controls.update();
   };
 
@@ -318,6 +416,7 @@ export function createStepRenderer(
   return {
     renderMeshes,
     fitToView,
+    setProjection,
     getSelectedFaces: () => [...selectedFaceIndices],
     dispose() {
       window.cancelAnimationFrame(animationFrame);

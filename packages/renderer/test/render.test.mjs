@@ -4,6 +4,7 @@ import * as THREE from "three";
 import {
   createGeometryGroup,
   fitCameraToBounds,
+  fitOrthographicCameraToBounds,
   PointerGestureTracker,
   updateFaceSelection,
 } from "../src/index.ts";
@@ -217,4 +218,47 @@ test("uses the default view direction when the camera and target coincide", () =
   assert.ok(
     camera.position.clone().sub(center).normalize().distanceTo(direction) < 1e-10,
   );
+});
+
+test("fits an orthographic camera to bounds while preserving its view direction", () => {
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
+  camera.position.set(6, 8, 12);
+  const bounds = new THREE.Box3(
+    new THREE.Vector3(8, 18, 28),
+    new THREE.Vector3(12, 22, 32),
+  );
+  const target = new THREE.Vector3(1, 2, 3);
+  const direction = camera.position.clone().sub(target).normalize();
+  const aspect = 2;
+
+  fitOrthographicCameraToBounds(camera, bounds, target, aspect);
+
+  const center = bounds.getCenter(new THREE.Vector3());
+  const radius = bounds.getBoundingSphere(new THREE.Sphere()).radius;
+  const verticalSpan = radius * 2.3;
+
+  assert.deepEqual(target.toArray(), center.toArray());
+  assert.ok(
+    camera.position.clone().sub(center).normalize().distanceTo(direction) < 1e-10,
+  );
+  assert.ok(Math.abs(camera.top - verticalSpan / 2) < 1e-10);
+  assert.ok(Math.abs(camera.right - (verticalSpan * aspect) / 2) < 1e-10);
+  assert.equal(camera.near, radius / 1000);
+  assert.equal(camera.far, radius * 100);
+});
+
+test("widens the orthographic vertical span for a portrait viewport", () => {
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
+  const bounds = new THREE.Box3(
+    new THREE.Vector3(-1, -1, -1),
+    new THREE.Vector3(1, 1, 1),
+  );
+  const target = new THREE.Vector3();
+  const aspect = 0.5;
+
+  fitOrthographicCameraToBounds(camera, bounds, target, aspect);
+
+  const radius = bounds.getBoundingSphere(new THREE.Sphere()).radius;
+  assert.ok(Math.abs(camera.right - camera.left - radius * 2.3) < 1e-10);
+  assert.ok(Math.abs(camera.top - camera.bottom - radius * 4.6) < 1e-10);
 });
