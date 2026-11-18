@@ -30,6 +30,11 @@ for (const projection of ["orthographic", "perspective"] as const) {
 }
 projectionSelect.value = "orthographic";
 
+const lightingControl = document.createElement("label");
+const lightingToggle = document.createElement("input");
+lightingToggle.type = "checkbox";
+lightingControl.append(lightingToggle, "Use original scene lighting");
+
 const status = document.createElement("p");
 status.className = "status";
 status.setAttribute("aria-live", "polite");
@@ -43,7 +48,16 @@ selectionStatus.textContent = "0 faces selected";
 const viewport = document.createElement("div");
 viewport.className = "viewport";
 
-app.append(heading, fileInput, fitButton, projectionSelect, status, selectionStatus, viewport);
+app.append(
+  heading,
+  fileInput,
+  fitButton,
+  projectionSelect,
+  lightingControl,
+  status,
+  selectionStatus,
+  viewport,
+);
 
 const kernel = new LibcascadeKernel();
 const renderer = createStepRenderer(viewport, (selectedFaceIndices) => {
@@ -56,6 +70,9 @@ projectionSelect.addEventListener("change", () => {
   const projection: CameraProjection =
     projectionSelect.value === "perspective" ? "perspective" : "orthographic";
   renderer.setProjection(projection);
+});
+lightingToggle.addEventListener("change", () => {
+  renderer.setShadingMode(lightingToggle.checked ? "original" : "flat");
 });
 
 fileInput.addEventListener("change", async () => {
