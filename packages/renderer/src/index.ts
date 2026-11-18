@@ -185,12 +185,18 @@ function createFaceMaterial(
   color: number,
 ): THREE.MeshBasicMaterial | THREE.MeshStandardMaterial {
   if (shadingMode === "flat") {
-    return new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 });
+    return new THREE.MeshBasicMaterial({
+      color,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.5,
+    });
   }
   return new THREE.MeshStandardMaterial({
     color,
     metalness: 0.1,
     roughness: 0.65,
+    side: THREE.DoubleSide,
     transparent: true,
     opacity: 0.5,
   });

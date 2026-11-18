@@ -66,6 +66,7 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(mesh.geometry.getAttribute("normal").count, 3);
   assert.ok(mesh.material instanceof THREE.MeshBasicMaterial);
   assert.equal(mesh.material.color.getHex(), 0x9caec2);
+  assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
   assert.equal(boundary.geometry.getAttribute("position").count, 6);
@@ -89,6 +90,7 @@ test("switches between flat and original shading while preserving selection", ()
   setGeometryGroupShading(group, "original", selectedFaceIndices);
   assert.ok(mesh.material instanceof THREE.MeshStandardMaterial);
   assert.equal(mesh.material.color.getHex(), 0xffc7c7);
+  assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
   assert.equal(mesh.material.metalness, 0.1);
@@ -97,6 +99,7 @@ test("switches between flat and original shading while preserving selection", ()
   setGeometryGroupShading(group, "flat", selectedFaceIndices);
   assert.ok(mesh.material instanceof THREE.MeshBasicMaterial);
   assert.equal(mesh.material.color.getHex(), 0xffc7c7);
+  assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
 
