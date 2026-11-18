@@ -167,17 +167,23 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
   assert.equal(mesh.material.depthWrite, false);
+  assert.equal(mesh.material.polygonOffset, true);
+  assert.equal(mesh.material.polygonOffsetFactor, 1);
+  assert.equal(mesh.material.polygonOffsetUnits, 1);
   assert.equal(getEdgeVertexCount(boundary), 6);
   assert.equal(boundary.visible, true);
   assert.equal(boundary.material.color.getHex(), 0x000000);
   assert.ok(boundary.material instanceof LineMaterial);
   assert.equal(boundary.material.linewidth, 1);
-  assert.equal(boundary.material.depthTest, false);
+  assert.equal(boundary.material.depthTest, true);
+  assert.equal(boundary.material.depthWrite, false);
   assert.equal(highlight.visible, false);
   assert.equal(highlight.material.color.getHex(), 0xff0000);
   assert.equal(highlight.material.linewidth, 1);
   assert.equal(highlight.material.depthTest, false);
   assert.equal(highlight.material.depthWrite, false);
+  assert.equal(boundary.renderOrder, 0);
+  assert.equal(mesh.renderOrder, 0);
   assert.ok(highlight.renderOrder > boundary.renderOrder);
 
   disposeGroup(group);
@@ -328,6 +334,38 @@ test("clamps face opacity and preserves it when switching shading", () => {
   setGeometryGroupOpacity(group, 0.3);
   setGeometryGroupShading(group, "original");
   assert.equal(mesh.material.opacity, 0.3);
+
+  disposeGroup(group);
+});
+
+test("switches opaque faces to depth-writing while keeping boundaries occludable", () => {
+  const group = createGeometryGroup(
+    [
+      {
+        faceIndex: 4,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+    ],
+    "flat",
+    1,
+  );
+  const mesh = group.children.find((child) => child instanceof THREE.Mesh);
+  const boundary = getBoundaryLines(group)[0];
+  const highlight = getSelectionHighlights(group)[0];
+
+  assert.equal(mesh.material.transparent, false);
+  assert.equal(mesh.material.depthWrite, true);
+  assert.equal(boundary.material.depthTest, true);
+  assert.equal(highlight.material.depthTest, false);
+
+  setGeometryGroupOpacity(group, 0.5);
+  assert.equal(mesh.material.transparent, true);
+  assert.equal(mesh.material.depthWrite, false);
+
+  setGeometryGroupOpacity(group, 1);
+  assert.equal(mesh.material.transparent, false);
+  assert.equal(mesh.material.depthWrite, true);
 
   disposeGroup(group);
 });
