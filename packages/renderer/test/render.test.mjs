@@ -87,7 +87,12 @@ test("creates a Three.js mesh for each tessellated face", () => {
   );
   const highlight = getSelectionHighlights(group)[0];
 
-  assert.equal(group.children.filter((child) => child instanceof THREE.Mesh).length, 1);
+  assert.equal(
+    group.children.filter(
+      (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+    ).length,
+    1,
+  );
   assert.equal(mesh.userData.faceIndex, 4);
   assert.equal(mesh.geometry.getAttribute("position").count, 3);
   assert.deepEqual(mesh.geometry.index?.array, new Uint32Array([0, 1, 2]));
@@ -127,11 +132,7 @@ test("ignores nearby boundary lines when picking faces", () => {
     new THREE.Vector3(0, 0, -1),
   );
 
-  assert.ok(
-    raycaster
-      .intersectObject(group, true)
-      .some((hit) => hit.object.userData.isEdgeLine),
-  );
+  assert.ok(getBoundaryLines(group).length > 0);
   assert.equal(raycastFaceIndex(raycaster, group), undefined);
 
   raycaster.set(
@@ -188,7 +189,9 @@ test("sets opacity on all face meshes without changing boundary overlays", () =>
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
-  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const meshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
   const boundaries = getBoundaryLines(group);
   const highlights = getSelectionHighlights(group);
 
@@ -297,6 +300,29 @@ test("classifies tangent shared boundaries as smooth and controls edge visibilit
   );
 
   disposeGroup(group);
+
+  const sharpGroup = createGeometryGroup(
+    [
+      {
+        faceIndex: 6,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+      {
+        faceIndex: 7,
+        positions: new Float32Array([1, 0, 0, 0, 0, 0, 1, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+    ],
+    "flat",
+    0.5,
+    1,
+    false,
+  );
+  const creaseBoundaries = getBoundaryLines(sharpGroup);
+  assert.ok(creaseBoundaries.every((edge) => !edge.userData.isSmoothEdge));
+  assert.ok(creaseBoundaries.every((edge) => edge.visible));
+  disposeGroup(sharpGroup);
 });
 
 test("adds and highlights selected faces without replacing prior selections", () => {
@@ -312,7 +338,9 @@ test("adds and highlights selected faces without replacing prior selections", ()
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
-  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const meshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
   const boundaries = getBoundaryLines(group);
   const highlights = getSelectionHighlights(group);
   const firstSelection = updateFaceSelection(group, new Set(), 4);
@@ -343,7 +371,9 @@ test("deselects a clicked face without clearing other selected faces", () => {
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
-  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const meshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
   const boundaries = getBoundaryLines(group);
   const highlights = getSelectionHighlights(group);
   const selection = updateFaceSelection(
@@ -374,10 +404,12 @@ test("clears selected faces and restores their base color when no face is hit", 
   ]);
   const selection = updateFaceSelection(group, new Set(), 4);
   const cleared = updateFaceSelection(group, selection);
-  const mesh = group.children.find((child) => child instanceof THREE.Mesh);
+  const mesh = group.children.find(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
   const boundary = group.children.find(
     (child) =>
-      child instanceof THREE.LineSegments &&
+      child.userData.isEdgeLine &&
       !child.userData.isSelectionHighlight,
   );
   const highlight = getSelectionHighlights(group)[0];

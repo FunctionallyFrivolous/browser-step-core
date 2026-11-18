@@ -199,7 +199,7 @@ function findSmoothBoundaryEdges(meshes: TriangleMesh[]): Set<string> {
   });
 
   const smoothEdges = new Set<string>();
-  const tangentThreshold = Math.cos(THREE.MathUtils.degToRad(5));
+  const tangentThreshold = Math.cos(THREE.MathUtils.degToRad(30));
   for (const [key, edges] of edgesByKey) {
     if (
       edges.some((edge, index) =>
@@ -269,6 +269,10 @@ export function createGeometryGroup(
   showSmoothEdges = true,
 ): THREE.Group {
   const group = new THREE.Group();
+  const clampedEdgeThickness = Math.max(
+    Number.isFinite(edgeThickness) ? edgeThickness : 0,
+    0,
+  );
   const smoothEdges = findSmoothBoundaryEdges(meshes);
 
   for (const mesh of meshes) {
@@ -285,7 +289,7 @@ export function createGeometryGroup(
         geometry,
         new LineMaterial({
           color: EDGE_COLOR,
-          linewidth: edgeThickness,
+          linewidth: clampedEdgeThickness,
           transparent: true,
           depthTest: false,
           depthWrite: false,
@@ -295,14 +299,14 @@ export function createGeometryGroup(
       boundary.userData.faceIndex = mesh.faceIndex;
       boundary.userData.isSmoothEdge = isSmooth;
       boundary.renderOrder = 1;
-      updateEdgeVisibility(boundary, edgeThickness, showSmoothEdges);
+      updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
       group.add(boundary);
 
       const highlight = new LineSegments2(
         geometry,
         new LineMaterial({
           color: SELECTED_EDGE_COLOR,
-          linewidth: edgeThickness,
+          linewidth: clampedEdgeThickness,
           transparent: true,
           depthTest: false,
           depthWrite: false,
@@ -314,12 +318,12 @@ export function createGeometryGroup(
       highlight.userData.isSelectionHighlight = true;
       highlight.userData.isSelected = false;
       highlight.renderOrder = 2;
-      updateEdgeVisibility(highlight, edgeThickness, showSmoothEdges);
+      updateEdgeVisibility(highlight, clampedEdgeThickness, showSmoothEdges);
       group.add(highlight);
     }
   }
 
-  group.userData.edgeThickness = Math.max(edgeThickness, 0);
+  group.userData.edgeThickness = clampedEdgeThickness;
   group.userData.showSmoothEdges = showSmoothEdges;
   return group;
 }
@@ -397,11 +401,14 @@ export function setGeometryGroupEdgeThickness(
   group: THREE.Group,
   edgeThickness: number,
 ): void {
-  const clampedThickness = Math.max(Number.isFinite(edgeThickness) ? edgeThickness : 0, 0);
+  const clampedThickness = Math.max(
+    Number.isFinite(edgeThickness) ? edgeThickness : 0,
+    0,
+  );
   group.userData.edgeThickness = clampedThickness;
   const showSmoothEdges = group.userData.showSmoothEdges !== false;
   group.traverse((object) => {
-    if (!object.userData.isEdgeLine) return;
+    if (!(object instanceof THREE.Mesh) || !object.userData.isEdgeLine) return;
     const material = object.material as LineMaterial;
     material.linewidth = clampedThickness;
     updateEdgeVisibility(object, clampedThickness, showSmoothEdges);
@@ -471,6 +478,7 @@ export function raycastFaceIndex(
   group.traverse((object) => {
     if (
       object instanceof THREE.Mesh &&
+      !object.userData.isEdgeLine &&
       typeof object.userData.faceIndex === "number"
     ) {
       faceMeshes.push(object);
@@ -549,7 +557,7 @@ export function createStepRenderer(
     renderer.setSize(width, height);
     aspect = width / height;
     geometryGroup?.traverse((object) => {
-      if (object.userData.isEdgeLine) {
+      if (object instanceof THREE.Mesh && object.userData.isEdgeLine) {
         (object.material as LineMaterial).resolution.set(width, height);
       }
     });
@@ -651,7 +659,10 @@ export function createStepRenderer(
   };
 
   const setEdgeThickness = (nextEdgeThickness: number) => {
-    edgeThickness = Math.max(Number.isFinite(nextEdgeThickness) ? nextEdgeThickness : 0, 0);
+    edgeThickness = Math.max(
+      Number.isFinite(nextEdgeThickness) ? nextEdgeThickness : 0,
+      0,
+    );
     if (geometryGroup) {
       setGeometryGroupEdgeThickness(geometryGroup, edgeThickness);
     }
@@ -715,7 +726,7 @@ export function createStepRenderer(
     );
     scene.add(geometryGroup);
     geometryGroup.traverse((object) => {
-      if (object.userData.isEdgeLine) {
+      if (object instanceof THREE.Mesh && object.userData.isEdgeLine) {
         (object.material as LineMaterial).resolution.set(
           Math.max(container.clientWidth, 1),
           Math.max(container.clientHeight, 1),
