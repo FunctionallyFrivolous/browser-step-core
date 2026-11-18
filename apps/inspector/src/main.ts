@@ -1,4 +1,4 @@
-import { LibcascadeKernel } from "@browser-step/kernel";
+import { ModelSession } from "@browser-step/core";
 import { createStepRenderer } from "@browser-step/renderer";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -35,7 +35,7 @@ viewport.className = "viewport";
 
 app.append(heading, fileInput, fitButton, status, selectionStatus, viewport);
 
-const kernel = new LibcascadeKernel();
+const session = new ModelSession();
 const renderer = createStepRenderer(viewport, (selectedFaceIndices) => {
   const count = selectedFaceIndices.length;
   selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
@@ -56,11 +56,11 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
   status.textContent = `Loading ${name}…`;
 
   try {
-    await kernel.loadStep(await readData());
-    renderer.renderMeshes(kernel.getTessellation());
+    await session.load(await readData());
+    renderer.renderMeshes(session.tessellation);
     fitButton.disabled = false;
     status.textContent =
-      `${name} — ${kernel.getBodyCount()} bodies, ${kernel.getFaceCount()} faces`;
+      `${name} — ${session.bodyCount} bodies, ${session.faceCount} faces`;
   } catch (error) {
     status.textContent =
       error instanceof Error ? error.message : "The STEP file could not be loaded.";
