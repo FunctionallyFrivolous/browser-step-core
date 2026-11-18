@@ -91,6 +91,39 @@ test("adds and highlights selected faces without replacing prior selections", ()
   disposeGroup(group);
 });
 
+test("deselects a clicked face without clearing other selected faces", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+    {
+      faceIndex: 5,
+      positions: new Float32Array([0, 0, 1, 1, 0, 1, 0, 1, 1]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const boundaries = group.children.filter(
+    (child) => child instanceof THREE.LineSegments,
+  );
+  const selection = updateFaceSelection(
+    group,
+    updateFaceSelection(group, new Set(), 4),
+    5,
+  );
+  const deselected = updateFaceSelection(group, selection, 4);
+
+  assert.deepEqual([...deselected], [5]);
+  assert.equal(meshes[0].material.color.getHex(), 0x9caec2);
+  assert.equal(meshes[1].material.color.getHex(), 0xffc7c7);
+  assert.equal(boundaries[0].visible, false);
+  assert.equal(boundaries[1].visible, true);
+
+  disposeGroup(group);
+});
+
 test("clears selected faces and restores their base color when no face is hit", () => {
   const group = createGeometryGroup([
     {

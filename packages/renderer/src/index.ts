@@ -121,10 +121,14 @@ export function updateFaceSelection(
   selectedFaceIndices: Set<number>,
   faceIndex?: number,
 ): Set<number> {
-  const nextSelection =
-    faceIndex === undefined
-      ? new Set<number>()
-      : new Set([...selectedFaceIndices, faceIndex]);
+  const nextSelection = new Set(selectedFaceIndices);
+  if (faceIndex === undefined) {
+    nextSelection.clear();
+  } else if (nextSelection.has(faceIndex)) {
+    nextSelection.delete(faceIndex);
+  } else {
+    nextSelection.add(faceIndex);
+  }
 
   group.traverse((object) => {
     if (object instanceof THREE.LineSegments) {
