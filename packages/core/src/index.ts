@@ -9,6 +9,98 @@ export interface Command {
   undo(): void | Promise<void>;
 }
 
+export type CameraProjection = "orthographic" | "perspective";
+
+export interface ViewState {
+  projection: CameraProjection;
+  position: [number, number, number];
+  target: [number, number, number];
+  verticalSpan: number;
+  near: number;
+  far: number;
+}
+
+function copyViewState(state: ViewState): ViewState {
+  return { ...state, position: [...state.position], target: [...state.target] };
+}
+
+function validateViewState(state: ViewState): void {
+  if (
+    (state.projection !== "orthographic" && state.projection !== "perspective") ||
+    state.position.length !== 3 ||
+    state.target.length !== 3 ||
+    ![...state.position, ...state.target, state.verticalSpan, state.near, state.far].every(Number.isFinite) ||
+    state.verticalSpan <= 0 ||
+    state.near <= 0 ||
+    state.far <= state.near ||
+    state.position.every((value, index) => value === state.target[index])
+  ) {
+    throw new Error("Invalid camera view state.");
+  }
+}
+
+export class ViewStateModel {
+  private current: ViewState;
+  private readonly saved = new Map<string, ViewState>();
+  private readonly listeners = new Set<(state: ViewState) => void>();
+
+  constructor(initial: ViewState = {
+    projection: "orthographic",
+    position: [1.8, 1.8, 2.4],
+    target: [0, 0, 0],
+    verticalSpan: 2,
+    near: 0.01,
+    far: 100000,
+  }) {
+    validateViewState(initial);
+    this.current = copyViewState(initial);
+  }
+
+  get state(): ViewState {
+    return copyViewState(this.current);
+  }
+
+  get bookmarks(): string[] {
+    return [...this.saved.keys()];
+  }
+
+  setState(state: ViewState): void {
+    validateViewState(state);
+    const previous = this.current;
+    if (
+      state.projection === previous.projection &&
+      state.verticalSpan === previous.verticalSpan &&
+      state.near === previous.near &&
+      state.far === previous.far &&
+      state.position.every((value, index) => value === previous.position[index]) &&
+      state.target.every((value, index) => value === previous.target[index])
+    ) return;
+
+    this.current = copyViewState(state);
+    for (const listener of this.listeners) listener(this.state);
+  }
+
+  saveBookmark(name: string): void {
+    this.saved.set(name, this.state);
+  }
+
+  restoreBookmark(name: string): boolean {
+    const state = this.saved.get(name);
+    if (!state) return false;
+    this.setState(state);
+    return true;
+  }
+
+  deleteBookmark(name: string): boolean {
+    return this.saved.delete(name);
+  }
+
+  subscribe(listener: (state: ViewState) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+}
+
 export class SelectionModel {
   private readonly faces = new Set<number>();
   private readonly listeners = new Set<(faces: number[]) => void>();

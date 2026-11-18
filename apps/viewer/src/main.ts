@@ -1,4 +1,4 @@
-import { CommandManager, ModelSession, SelectionModel } from "@browser-step/core";
+import { CommandManager, ModelSession, SelectionModel, ViewStateModel } from "@browser-step/core";
 import { createStepRenderer, type CameraProjection } from "@browser-step/renderer";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -102,10 +102,24 @@ app.append(
 const session = new ModelSession();
 const commandManager = new CommandManager();
 const selection = new SelectionModel();
+const view = new ViewStateModel();
+let updatingViewFromRenderer = false;
 const renderer = createStepRenderer(viewport, (faceIndex) => {
   if (faceIndex === undefined) selection.clear();
   else selection.toggle(faceIndex);
+}, (state) => {
+  updatingViewFromRenderer = true;
+  try {
+    view.setState(state);
+  } finally {
+    updatingViewFromRenderer = false;
+  }
 });
+view.subscribe((state) => {
+  projectionSelect.value = state.projection;
+  if (!updatingViewFromRenderer) renderer.setViewState(state);
+});
+renderer.setViewState(view.state);
 selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
   const count = selectedFaceIndices.length;

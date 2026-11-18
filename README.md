@@ -16,6 +16,14 @@ Run `npm install` once, then use `npm run dev --workspace @browser-step/viewer` 
 Use `npm run dev --workspace @browser-step/inspector` to start the inspector.
 Run `npm run build` at the repository root to type-check the workspace and build both applications.
 
+## Shared view state
+
+`ViewStateModel` from `@browser-step/core` stores camera projection, position,
+target, scale, and clipping independently of the renderer. Its snapshots can be
+updated with `setState`, observed with `subscribe`, and saved, restored, or
+deleted as named in-memory bookmarks. Bookmarks are not persisted. The viewer
+synchronizes this state with camera navigation, projection changes, and fitting.
+
 ## GitHub Pages deployment
 
 In the repository's **Settings → Pages → Build and deployment**, set **Source** to
