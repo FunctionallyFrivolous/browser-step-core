@@ -20,6 +20,22 @@ function disposeGroup(group) {
   });
 }
 
+function getBoundaryLines(group) {
+  return group.children.filter(
+    (child) =>
+      child instanceof THREE.LineSegments &&
+      !child.userData.isSelectionHighlight,
+  );
+}
+
+function getSelectionHighlights(group) {
+  return group.children.filter(
+    (child) =>
+      child instanceof THREE.LineSegments &&
+      child.userData.isSelectionHighlight,
+  );
+}
+
 test("distinguishes pointer clicks from camera drags", () => {
   const gestures = new PointerGestureTracker();
 
@@ -57,8 +73,11 @@ test("creates a Three.js mesh for each tessellated face", () => {
   ]);
   const mesh = group.children.find((child) => child instanceof THREE.Mesh);
   const boundary = group.children.find(
-    (child) => child instanceof THREE.LineSegments,
+    (child) =>
+      child instanceof THREE.LineSegments &&
+      !child.userData.isSelectionHighlight,
   );
+  const highlight = getSelectionHighlights(group)[0];
 
   assert.equal(group.children.filter((child) => child instanceof THREE.Mesh).length, 1);
   assert.equal(mesh.userData.faceIndex, 4);
@@ -73,6 +92,13 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(boundary.geometry.getAttribute("position").count, 6);
   assert.equal(boundary.visible, true);
   assert.equal(boundary.material.color.getHex(), 0x000000);
+  assert.equal(boundary.material.depthTest, false);
+  assert.equal(highlight.visible, false);
+  assert.equal(highlight.material.color.getHex(), 0xff0000);
+  assert.equal(highlight.material.linewidth, 1.5);
+  assert.equal(highlight.material.depthTest, false);
+  assert.equal(highlight.material.depthWrite, false);
+  assert.ok(highlight.renderOrder > boundary.renderOrder);
 
   disposeGroup(group);
 });
@@ -175,9 +201,8 @@ test("adds and highlights selected faces without replacing prior selections", ()
     },
   ]);
   const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
-  const boundaries = group.children.filter(
-    (child) => child instanceof THREE.LineSegments,
-  );
+  const boundaries = getBoundaryLines(group);
+  const highlights = getSelectionHighlights(group);
   const firstSelection = updateFaceSelection(group, new Set(), 4);
   const selected = updateFaceSelection(group, firstSelection, 5);
 
@@ -188,6 +213,7 @@ test("adds and highlights selected faces without replacing prior selections", ()
   assert.ok(
     boundaries.every((boundary) => boundary.material.color.getHex() === 0x000000),
   );
+  assert.ok(highlights.every((highlight) => highlight.visible));
 
   disposeGroup(group);
 });
@@ -206,9 +232,8 @@ test("deselects a clicked face without clearing other selected faces", () => {
     },
   ]);
   const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
-  const boundaries = group.children.filter(
-    (child) => child instanceof THREE.LineSegments,
-  );
+  const boundaries = getBoundaryLines(group);
+  const highlights = getSelectionHighlights(group);
   const selection = updateFaceSelection(
     group,
     updateFaceSelection(group, new Set(), 4),
@@ -221,6 +246,8 @@ test("deselects a clicked face without clearing other selected faces", () => {
   assert.equal(meshes[1].material.color.getHex(), 0xffc7c7);
   assert.equal(boundaries[0].visible, true);
   assert.equal(boundaries[1].visible, true);
+  assert.equal(highlights[0].visible, false);
+  assert.equal(highlights[1].visible, true);
 
   disposeGroup(group);
 });
@@ -237,12 +264,16 @@ test("clears selected faces and restores their base color when no face is hit", 
   const cleared = updateFaceSelection(group, selection);
   const mesh = group.children.find((child) => child instanceof THREE.Mesh);
   const boundary = group.children.find(
-    (child) => child instanceof THREE.LineSegments,
+    (child) =>
+      child instanceof THREE.LineSegments &&
+      !child.userData.isSelectionHighlight,
   );
+  const highlight = getSelectionHighlights(group)[0];
 
   assert.equal(cleared.size, 0);
   assert.equal(mesh.material.color.getHex(), 0x9caec2);
   assert.equal(boundary.visible, true);
+  assert.equal(highlight.visible, false);
 
   disposeGroup(group);
 });
