@@ -356,7 +356,6 @@ function createFaceMaterial(
 export function setGeometryGroupShading(
   group: THREE.Group,
   shadingMode: ShadingMode,
-  selectedFaceIndices: Set<number> = new Set(),
   opacity = DEFAULT_FACE_OPACITY,
 ): void {
   group.traverse((object) => {
@@ -370,9 +369,7 @@ export function setGeometryGroupShading(
       return;
     }
 
-    const color = selectedFaceIndices.has(object.userData.faceIndex)
-      ? SELECTED_FACE_COLOR
-      : FACE_COLOR;
+    const color = previousMaterial.color.getHex();
     object.material = createFaceMaterial(shadingMode, color, opacity);
     previousMaterial.dispose();
   });
@@ -427,24 +424,14 @@ export function setGeometryGroupSmoothEdgesVisible(
   });
 }
 
-export function updateFaceSelection(
+export function setGeometryGroupSelection(
   group: THREE.Group,
-  selectedFaceIndices: Set<number>,
-  faceIndex?: number,
-): Set<number> {
-  const nextSelection = new Set(selectedFaceIndices);
-  if (faceIndex === undefined) {
-    nextSelection.clear();
-  } else if (nextSelection.has(faceIndex)) {
-    nextSelection.delete(faceIndex);
-  } else {
-    nextSelection.add(faceIndex);
-  }
-
+  selectedFaceIndices: ReadonlySet<number>,
+): void {
   group.traverse((object) => {
     if (object.userData.isEdgeLine) {
       if (object.userData.isSelectionHighlight) {
-        object.userData.isSelected = nextSelection.has(object.userData.faceIndex);
+        object.userData.isSelected = selectedFaceIndices.has(object.userData.faceIndex);
       }
       updateEdgeVisibility(
         object,
@@ -461,13 +448,11 @@ export function updateFaceSelection(
       | THREE.MeshBasicMaterial
       | THREE.MeshStandardMaterial;
     material.color.set(
-      nextSelection.has(object.userData.faceIndex)
+      selectedFaceIndices.has(object.userData.faceIndex)
         ? SELECTED_FACE_COLOR
         : FACE_COLOR,
     );
   });
-
-  return nextSelection;
 }
 
 export function raycastFaceIndex(
@@ -506,16 +491,16 @@ function disposeGeometryGroup(group: THREE.Group): void {
 
 export function createStepRenderer(
   container: HTMLElement,
-  onSelectionChange: (selectedFaceIndices: number[]) => void = () => {},
+  onPick: (faceIndex: number | undefined) => void = () => {},
 ): {
   renderMeshes(meshes: TriangleMesh[]): void;
+  setSelectedFaces(faceIndices: readonly number[]): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
   setShadingMode(shadingMode: ShadingMode): void;
   setOpacity(opacity: number): void;
   setEdgeThickness(edgeThickness: number): void;
   setShowSmoothEdges(showSmoothEdges: boolean): void;
-  getSelectedFaces(): number[];
   dispose(): void;
 } {
   const scene = new THREE.Scene();
@@ -541,7 +526,6 @@ export function createStepRenderer(
   );
   controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
-  let selectedFaceIndices = new Set<number>();
   let shadingMode: ShadingMode = "flat";
   let faceOpacity = DEFAULT_FACE_OPACITY;
   let edgeThickness = 1;
@@ -647,7 +631,6 @@ export function createStepRenderer(
       setGeometryGroupShading(
         geometryGroup,
         shadingMode,
-        selectedFaceIndices,
         faceOpacity,
       );
     }
@@ -675,11 +658,10 @@ export function createStepRenderer(
     }
   };
 
-  const selectFace = (faceIndex?: number) => {
-    selectedFaceIndices = geometryGroup
-      ? updateFaceSelection(geometryGroup, selectedFaceIndices, faceIndex)
-      : new Set<number>();
-    onSelectionChange([...selectedFaceIndices]);
+  const setSelectedFaces = (faceIndices: readonly number[]) => {
+    if (geometryGroup) {
+      setGeometryGroupSelection(geometryGroup, new Set(faceIndices));
+    }
   };
 
   const handleCanvasClick = (event: MouseEvent) => {
@@ -692,7 +674,7 @@ export function createStepRenderer(
     pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
 
-    selectFace(raycastFaceIndex(raycaster, geometryGroup));
+    onPick(raycastFaceIndex(raycaster, geometryGroup));
   };
 
   const handlePointerDown = (event: PointerEvent) => {
@@ -708,7 +690,7 @@ export function createStepRenderer(
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Escape") selectFace();
+    if (event.key === "Escape") onPick(undefined);
   };
 
   const renderMeshes = (meshes: TriangleMesh[]) => {
@@ -733,7 +715,6 @@ export function createStepRenderer(
         );
       }
     });
-    selectFace();
     fitToView();
   };
 
@@ -749,13 +730,13 @@ export function createStepRenderer(
 
   return {
     renderMeshes,
+    setSelectedFaces,
     fitToView,
     setProjection,
     setShadingMode,
     setOpacity,
     setEdgeThickness,
     setShowSmoothEdges,
-    getSelectedFaces: () => [...selectedFaceIndices],
     dispose() {
       window.cancelAnimationFrame(animationFrame);
       window.removeEventListener("resize", resize);

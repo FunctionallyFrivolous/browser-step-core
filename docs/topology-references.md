@@ -10,9 +10,10 @@ gap in the indices of the returned meshes. The kernel separately counts faces
 by traversing the shape; neither count nor index is a persistent identity.
 
 The renderer copies `faceIndex` into each Three.js face mesh and its edge
-objects. Raycasting returns the hit mesh's index, and the renderer keeps
-selection as a `Set<number>` of those indices. Re-rendering replaces the
-geometry and clears selection. `ModelSession` increments a numeric revision
+objects. Raycasting returns the hit mesh's index, and the shared selection
+model keeps those indices while the renderer displays their highlights. Both
+applications clear selection when replacing the geometry after a successful
+load. `ModelSession` increments a numeric revision
 after a successful STEP load, but that revision is not currently attached to
 face picks or selection.
 
