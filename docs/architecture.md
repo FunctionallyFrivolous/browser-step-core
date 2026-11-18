@@ -9,7 +9,7 @@ OpenCascade BRep is the authoritative model. Three.js geometry is derived for re
 - **Kernel (`packages/kernel`)** — owns OpenCascade initialization, BRep state, STEP I/O, topology queries, and geometric operations.
 - **Model (`packages/core`)** — represents application-level bodies, faces, and edges and coordinates undoable commands.
 - **Rendering (`packages/renderer`)** — turns kernel-produced tessellation into Three.js objects and maps picking results back to model topology.
-- **Commands** — the only way to modify a model; commands invoke kernel operations and participate in undo/redo.
+- **Commands (`packages/core`)** — `Command` defines execute and undo operations, and `CommandManager` tracks command execution for undo and redo. Model-editing commands will invoke kernel operations through this boundary; none are defined yet.
 - **Applications** — viewer and future tools consume the shared packages.
 
 ## OpenCascade integration research
