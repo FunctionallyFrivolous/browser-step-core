@@ -4,6 +4,7 @@ import * as THREE from "three";
 import {
   createGeometryGroup,
   fitCameraToBounds,
+  PointerGestureTracker,
   updateFaceSelection,
 } from "../src/index.ts";
 
@@ -15,6 +16,33 @@ function disposeGroup(group) {
     }
   });
 }
+
+test("distinguishes pointer clicks from camera drags", () => {
+  const gestures = new PointerGestureTracker();
+
+  gestures.start(1, 10, 10);
+  gestures.move(1, 13, 14);
+  gestures.end(1, 13, 14);
+  assert.equal(gestures.consumeDrag(), false);
+
+  gestures.start(1, 10, 10);
+  gestures.move(1, 14, 14);
+  gestures.end(1, 14, 14);
+  assert.equal(gestures.consumeDrag(), true);
+  assert.equal(gestures.consumeDrag(), false);
+});
+
+test("tracks camera gestures across multiple pointers", () => {
+  const gestures = new PointerGestureTracker();
+
+  gestures.start(1, 10, 10);
+  gestures.start(2, 20, 20);
+  gestures.move(2, 30, 20);
+  gestures.end(2, 30, 20);
+  gestures.end(1, 10, 10);
+
+  assert.equal(gestures.consumeDrag(), true);
+});
 
 test("creates a Three.js mesh for each tessellated face", () => {
   const group = createGeometryGroup([
