@@ -47,7 +47,7 @@ export class PointerGestureTracker {
 
 const FACE_COLOR = 0x9caec2;
 const SELECTED_FACE_COLOR = 0xffc7c7;
-const SELECTED_EDGE_COLOR = 0x8b0000;
+const EDGE_COLOR = 0x000000;
 
 export function fitCameraToBounds(
   camera: THREE.PerspectiveCamera,
@@ -169,9 +169,9 @@ export function createGeometryGroup(
 
     const boundary = new THREE.LineSegments(
       createFaceBoundaryGeometry(mesh),
-      new THREE.LineBasicMaterial({ color: SELECTED_EDGE_COLOR }),
+      new THREE.LineBasicMaterial({ color: EDGE_COLOR, transparent: true }),
     );
-    boundary.visible = false;
+    boundary.visible = true;
     boundary.renderOrder = 1;
     boundary.userData.faceIndex = mesh.faceIndex;
     group.add(boundary);
@@ -185,12 +185,14 @@ function createFaceMaterial(
   color: number,
 ): THREE.MeshBasicMaterial | THREE.MeshStandardMaterial {
   if (shadingMode === "flat") {
-    return new THREE.MeshBasicMaterial({ color });
+    return new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.5 });
   }
   return new THREE.MeshStandardMaterial({
     color,
     metalness: 0.1,
     roughness: 0.65,
+    transparent: true,
+    opacity: 0.5,
   });
 }
 
@@ -233,10 +235,6 @@ export function updateFaceSelection(
   }
 
   group.traverse((object) => {
-    if (object instanceof THREE.LineSegments) {
-      object.visible = nextSelection.has(object.userData.faceIndex);
-      return;
-    }
     if (!(object instanceof THREE.Mesh) || Array.isArray(object.material)) return;
     if (!("color" in object.material)) return;
 

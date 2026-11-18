@@ -66,8 +66,11 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(mesh.geometry.getAttribute("normal").count, 3);
   assert.ok(mesh.material instanceof THREE.MeshBasicMaterial);
   assert.equal(mesh.material.color.getHex(), 0x9caec2);
+  assert.equal(mesh.material.transparent, true);
+  assert.equal(mesh.material.opacity, 0.5);
   assert.equal(boundary.geometry.getAttribute("position").count, 6);
-  assert.equal(boundary.visible, false);
+  assert.equal(boundary.visible, true);
+  assert.equal(boundary.material.color.getHex(), 0x000000);
 
   disposeGroup(group);
 });
@@ -86,12 +89,16 @@ test("switches between flat and original shading while preserving selection", ()
   setGeometryGroupShading(group, "original", selectedFaceIndices);
   assert.ok(mesh.material instanceof THREE.MeshStandardMaterial);
   assert.equal(mesh.material.color.getHex(), 0xffc7c7);
+  assert.equal(mesh.material.transparent, true);
+  assert.equal(mesh.material.opacity, 0.5);
   assert.equal(mesh.material.metalness, 0.1);
   assert.equal(mesh.material.roughness, 0.65);
 
   setGeometryGroupShading(group, "flat", selectedFaceIndices);
   assert.ok(mesh.material instanceof THREE.MeshBasicMaterial);
   assert.equal(mesh.material.color.getHex(), 0xffc7c7);
+  assert.equal(mesh.material.transparent, true);
+  assert.equal(mesh.material.opacity, 0.5);
 
   disposeGroup(group);
 });
@@ -114,7 +121,9 @@ test("boundary overlays omit internal triangulation edges", () => {
   );
 
   assert.equal(boundary.geometry.getAttribute("position").count, 8);
-  assert.equal(boundary.material.color.getHex(), 0x8b0000);
+  assert.equal(boundary.material.color.getHex(), 0x000000);
+  assert.equal(boundary.material.transparent, true);
+  assert.equal(boundary.visible, true);
 
   disposeGroup(group);
 });
@@ -143,6 +152,9 @@ test("adds and highlights selected faces without replacing prior selections", ()
   assert.ok(meshes.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
   assert.notEqual(meshes[0].material, meshes[1].material);
   assert.ok(boundaries.every((boundary) => boundary.visible));
+  assert.ok(
+    boundaries.every((boundary) => boundary.material.color.getHex() === 0x000000),
+  );
 
   disposeGroup(group);
 });
@@ -174,7 +186,7 @@ test("deselects a clicked face without clearing other selected faces", () => {
   assert.deepEqual([...deselected], [5]);
   assert.equal(meshes[0].material.color.getHex(), 0x9caec2);
   assert.equal(meshes[1].material.color.getHex(), 0xffc7c7);
-  assert.equal(boundaries[0].visible, false);
+  assert.equal(boundaries[0].visible, true);
   assert.equal(boundaries[1].visible, true);
 
   disposeGroup(group);
@@ -197,7 +209,7 @@ test("clears selected faces and restores their base color when no face is hit", 
 
   assert.equal(cleared.size, 0);
   assert.equal(mesh.material.color.getHex(), 0x9caec2);
-  assert.equal(boundary.visible, false);
+  assert.equal(boundary.visible, true);
 
   disposeGroup(group);
 });
