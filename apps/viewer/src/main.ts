@@ -1,4 +1,4 @@
-import { ModelSession } from "@browser-step/core";
+import { CommandManager, ModelSession } from "@browser-step/core";
 import { createStepRenderer, type CameraProjection } from "@browser-step/renderer";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -100,6 +100,7 @@ app.append(
 );
 
 const session = new ModelSession();
+const commandManager = new CommandManager();
 const renderer = createStepRenderer(viewport, (selectedFaceIndices) => {
   const count = selectedFaceIndices.length;
   selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;

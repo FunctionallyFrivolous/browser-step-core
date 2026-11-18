@@ -30,15 +30,15 @@ This audit compares the current implementation with the project goals and intend
 
 ## 4. Shared-package organization
 
-- **Current status:** The npm workspace contains `core`, `kernel`, and `renderer` packages, and the viewer imports the kernel and renderer packages. The core package currently exports nothing (`packages/core/src/index.ts` contains only `export {}`). See [`package.json`](../package.json), [`packages/core/src/index.ts`](../packages/core/src/index.ts), and [`apps/viewer/src/main.ts`](../apps/viewer/src/main.ts).
-- **Alignment:** **Partial.** The workspace and kernel/renderer packages establish a starting point for reuse, but the model/application core and most application-level behavior have not been implemented as shared packages.
+- **Current status:** The npm workspace contains `core`, `kernel`, and `renderer` packages. Core exports the model session and command framework, and the viewer instantiates a `CommandManager`. See [`package.json`](../package.json), [`packages/core/src/index.ts`](../packages/core/src/index.ts), and [`apps/viewer/src/main.ts`](../apps/viewer/src/main.ts).
+- **Alignment:** **Partial.** The workspace and kernel/renderer packages establish a starting point for reuse, and core now provides a model session and command framework. Most application-level behavior has not been implemented as shared packages.
 - **Risks:** The viewer currently coordinates file loading, UI controls, kernel calls, and renderer calls directly. A second app could duplicate this coordination or couple itself to the current viewer/rendering API.
-- **Recommended improvements:** Populate `core` with genuinely shared model and command abstractions when their responsibilities are established. Extract reusable selection, styling, and camera/view state where they are needed by multiple applications; keep app-specific UI and composition inside each app.
+- **Recommended improvements:** Expand `core` with shared model state and application behavior where they are needed across applications. Extract reusable selection, styling, and camera/view state only where multiple applications need them; keep app-specific UI and composition inside each app.
 - **Priority:** **High** — package boundaries exist, but the core intended to make them useful is empty.
 
 ## 5. State management
 
-- **Current status:** The kernel retains the current shape and counts. The renderer closure retains camera/controls, selection, shading, opacity, edge thickness, and smooth-edge visibility; the viewer owns input controls and status text. See [`packages/kernel/src/index.ts`](../packages/kernel/src/index.ts), [`packages/renderer/src/index.ts`](../packages/renderer/src/index.ts) (`createStepRenderer`), and [`apps/viewer/src/main.ts`](../apps/viewer/src/main.ts).
+- **Current status:** The kernel retains the current shape and counts. Core provides command history for execute/undo/redo, but no model-editing commands or broader shared application state are implemented. The renderer closure retains camera/controls, selection, shading, opacity, edge thickness, and smooth-edge visibility; the viewer owns input controls and status text. See [`packages/kernel/src/index.ts`](../packages/kernel/src/index.ts), [`packages/core/src/index.ts`](../packages/core/src/index.ts), [`packages/renderer/src/index.ts`](../packages/renderer/src/index.ts) (`createStepRenderer`), and [`apps/viewer/src/main.ts`](../apps/viewer/src/main.ts).
 - **Alignment:** **Partial.** Kernel geometry is separated from rendering state and viewer UI, but there is no shared application model or explicit state store tying model revisions, selection, styling, and camera state together.
 - **Risks:** State transitions are distributed across the viewer, renderer, and kernel APIs. There is no common command/history boundary or explicit invalidation contract for derived meshes and topology references when a model changes.
 - **Recommended improvements:** Introduce shared model state and command interfaces as editing functionality is added. Keep camera and presentation preferences separate from authoritative geometry; associate derived rendering and selection references with model revisions.
@@ -46,7 +46,7 @@ This audit compares the current implementation with the project goals and intend
 
 ## 6. Future extensibility
 
-- **Current status:** The workspace is structured to contain multiple applications and reusable packages, but only `apps/viewer` exists. The viewer directly composes the current kernel and Three.js renderer, and `core` is empty. See [`package.json`](../package.json), [`apps/viewer/src/main.ts`](../apps/viewer/src/main.ts), and [`packages/core/src/index.ts`](../packages/core/src/index.ts).
+- **Current status:** The workspace is structured to contain multiple applications and reusable packages, with viewer and inspector apps. Both directly compose the current kernel and Three.js renderer; core provides a model session and command framework. See [`package.json`](../package.json), [`apps/viewer/src/main.ts`](../apps/viewer/src/main.ts), [`apps/inspector/src/main.ts`](../apps/inspector/src/main.ts), and [`packages/core/src/index.ts`](../packages/core/src/index.ts).
 - **Alignment:** **Partial.** The repository has an extensible package layout, but the implementation has not yet demonstrated that another application can use the framework without depending on viewer-specific composition or Three.js-oriented behavior.
 - **Risks:** Adding broad platform features before testing package boundaries could solidify assumptions that only work for the current viewer. Conversely, building another application without a narrow validation scope could duplicate the same tightly coupled orchestration.
 - **Recommended improvements:** Build a small second-application vertical slice against shared packages, focusing on a distinct workflow and checking that it does not import from the viewer. Use friction found in that slice to refine stable shared contracts before expanding the framework.
@@ -59,13 +59,13 @@ This audit compares the current implementation with the project goals and intend
 | Kernel ownership | **Partially Ready** | The kernel owns the loaded BRep and emits derived tessellation; editing operations and revision-safe topology references are not yet in place. |
 | Rendering architecture | **Partially Ready** | Three.js objects are derived and disposable, but the renderer combines rendering with camera, styling, and selection behavior. |
 | Selection architecture | **Partially Ready** | Reusable helper functions exist inside the renderer package, but selection state and picking are coupled to Three.js. |
-| Shared-package organization | **Partially Ready** | Kernel and renderer packages are consumed by the viewer, while the core package is empty and there is only one application. |
-| State management | **Not Ready** | There is no shared application model or explicit command, state ownership, and revision-invalidation architecture. |
+| Shared-package organization | **Partially Ready** | Kernel and renderer packages are consumed by both applications, and core now provides a model session and command framework; most application coordination remains app-owned. |
+| State management | **Not Ready** | Command history is available, but there is no shared application state ownership or revision-invalidation architecture. |
 | Future extensibility | **Partially Ready** | The workspace supports adding apps, but reuse without depending on viewer-specific or Three.js-oriented composition has not been validated. |
 
 ### Recommendation
 
-**B) Create the second application now and use it to validate the framework**, as a deliberately small validation exercise rather than a broad feature project. The existing kernel and renderer packages provide enough to test real reuse, while the empty core package and renderer-owned selection/presentation state make the framework boundaries uncertain. Have the second app consume shared packages only, record any duplicated or viewer-specific dependencies, and extract abstractions only where that exercise demonstrates a genuine cross-application need. This should validate the platform structure before more functionality makes the current boundaries harder to change.
+**B) Create the second application now and use it to validate the framework**, as a deliberately small validation exercise rather than a broad feature project. The existing kernel and renderer packages provide enough to test real reuse, while the limited core framework and renderer-owned selection/presentation state make some boundaries uncertain. Have the second app consume shared packages only, record any duplicated or viewer-specific dependencies, and extract abstractions only where that exercise demonstrates a genuine cross-application need. This should validate the platform structure before more functionality makes the current boundaries harder to change.
 
 ## Inspector Application Findings
 
