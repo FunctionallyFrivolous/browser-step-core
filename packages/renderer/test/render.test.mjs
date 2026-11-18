@@ -90,6 +90,7 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
+  assert.equal(mesh.material.depthWrite, false);
   assert.equal(boundary.geometry.getAttribute("position").count, 6);
   assert.equal(boundary.visible, true);
   assert.equal(boundary.material.color.getHex(), 0x000000);
@@ -150,6 +151,7 @@ test("switches between flat and original shading while preserving selection", ()
   assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
+  assert.equal(mesh.material.depthWrite, false);
   assert.equal(mesh.material.metalness, 0.1);
   assert.equal(mesh.material.roughness, 0.65);
 
@@ -159,6 +161,7 @@ test("switches between flat and original shading while preserving selection", ()
   assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
+  assert.equal(mesh.material.depthWrite, false);
 
   disposeGroup(group);
 });
