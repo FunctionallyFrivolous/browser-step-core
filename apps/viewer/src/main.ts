@@ -48,6 +48,30 @@ opacityValue.value = "50%";
 opacityValue.textContent = opacityValue.value;
 opacityControl.append("Model opacity", opacitySlider, opacityValue);
 
+const edgeThicknessControl = document.createElement("label");
+edgeThicknessControl.className = "edge-thickness-control";
+const edgeThicknessSlider = document.createElement("input");
+edgeThicknessSlider.type = "range";
+edgeThicknessSlider.min = "0";
+edgeThicknessSlider.max = "5";
+edgeThicknessSlider.step = "0.1";
+edgeThicknessSlider.value = "1";
+edgeThicknessSlider.setAttribute("aria-label", "Edge line thickness");
+const edgeThicknessValue = document.createElement("output");
+edgeThicknessValue.value = "1 px";
+edgeThicknessValue.textContent = edgeThicknessValue.value;
+edgeThicknessControl.append(
+  "Edge line thickness",
+  edgeThicknessSlider,
+  edgeThicknessValue,
+);
+
+const smoothEdgesControl = document.createElement("label");
+const smoothEdgesToggle = document.createElement("input");
+smoothEdgesToggle.type = "checkbox";
+smoothEdgesToggle.checked = true;
+smoothEdgesControl.append(smoothEdgesToggle, "Show smooth edges");
+
 const status = document.createElement("p");
 status.className = "status";
 status.setAttribute("aria-live", "polite");
@@ -68,6 +92,8 @@ app.append(
   projectionSelect,
   lightingControl,
   opacityControl,
+  edgeThicknessControl,
+  smoothEdgesControl,
   status,
   selectionStatus,
   viewport,
@@ -92,6 +118,15 @@ opacitySlider.addEventListener("input", () => {
   renderer.setOpacity(Number(opacitySlider.value));
   opacityValue.value = `${Math.round(Number(opacitySlider.value) * 100)}%`;
   opacityValue.textContent = opacityValue.value;
+});
+edgeThicknessSlider.addEventListener("input", () => {
+  const thickness = Number(edgeThicknessSlider.value);
+  renderer.setEdgeThickness(thickness);
+  edgeThicknessValue.value = `${thickness} px`;
+  edgeThicknessValue.textContent = edgeThicknessValue.value;
+});
+smoothEdgesToggle.addEventListener("change", () => {
+  renderer.setShowSmoothEdges(smoothEdgesToggle.checked);
 });
 
 fileInput.addEventListener("change", async () => {

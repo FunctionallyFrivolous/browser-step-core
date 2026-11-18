@@ -1,5 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
+import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 
 export interface TriangleMesh {
   positions: Float32Array;
@@ -112,16 +115,25 @@ export function createFaceGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
   return geometry;
 }
 
-function createFaceBoundaryGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
-  const edges = new Map<string, { start: number; end: number; count: number }>();
+interface BoundaryEdge {
+  start: number;
+  end: number;
+  faceIndex: number;
+  normal: THREE.Vector3;
+}
 
-  const addEdge = (start: number, end: number) => {
+function createFaceBoundaryEdges(mesh: TriangleMesh): BoundaryEdge[] {
+  const edges = new Map<string, { start: number; end: number; count: number }>();
+  const normals = new Map<string, THREE.Vector3>();
+
+  const addEdge = (start: number, end: number, normal: THREE.Vector3) => {
     const key = `${Math.min(start, end)}:${Math.max(start, end)}`;
     const edge = edges.get(key);
     if (edge) {
       edge.count += 1;
     } else {
       edges.set(key, { start, end, count: 1 });
+      normals.set(key, normal);
     }
   };
 
@@ -129,15 +141,93 @@ function createFaceBoundaryGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
     const first = mesh.indices[index];
     const second = mesh.indices[index + 1];
     const third = mesh.indices[index + 2];
-    addEdge(first, second);
-    addEdge(second, third);
-    addEdge(third, first);
+    const firstOffset = first * 3;
+    const secondOffset = second * 3;
+    const thirdOffset = third * 3;
+    const normal = new THREE.Vector3(
+      mesh.positions[secondOffset] - mesh.positions[firstOffset],
+      mesh.positions[secondOffset + 1] - mesh.positions[firstOffset + 1],
+      mesh.positions[secondOffset + 2] - mesh.positions[firstOffset + 2],
+    ).cross(
+      new THREE.Vector3(
+        mesh.positions[thirdOffset] - mesh.positions[firstOffset],
+        mesh.positions[thirdOffset + 1] - mesh.positions[firstOffset + 1],
+        mesh.positions[thirdOffset + 2] - mesh.positions[firstOffset + 2],
+      ),
+    ).normalize();
+    addEdge(first, second, normal);
+    addEdge(second, third, normal);
+    addEdge(third, first, normal);
   }
 
-  const positions: number[] = [];
-  for (const edge of edges.values()) {
-    if (edge.count !== 1) continue;
+  return [...edges.entries()]
+    .filter(([, edge]) => edge.count === 1)
+    .map(([key, edge]) => ({
+      ...edge,
+      faceIndex: mesh.faceIndex,
+      normal: normals.get(key)!,
+    }));
+}
 
+function getBoundaryEdgeKey(
+  mesh: TriangleMesh,
+  edge: BoundaryEdge,
+): string {
+  const coordinates = [edge.start, edge.end].map((vertex) => {
+    const offset = vertex * 3;
+    return [
+      mesh.positions[offset],
+      mesh.positions[offset + 1],
+      mesh.positions[offset + 2],
+    ]
+      .map((coordinate) => Math.round(coordinate * 100_000))
+      .join(",");
+  });
+  coordinates.sort();
+  return coordinates.join(":");
+}
+
+function findSmoothBoundaryEdges(meshes: TriangleMesh[]): Set<string> {
+  const edgesByKey = new Map<string, BoundaryEdge[]>();
+  meshes.forEach((mesh) => {
+    for (const edge of createFaceBoundaryEdges(mesh)) {
+      const key = getBoundaryEdgeKey(mesh, edge);
+      const edges = edgesByKey.get(key) ?? [];
+      edges.push(edge);
+      edgesByKey.set(key, edges);
+    }
+  });
+
+  const smoothEdges = new Set<string>();
+  const tangentThreshold = Math.cos(THREE.MathUtils.degToRad(30));
+  for (const [key, edges] of edgesByKey) {
+    if (
+      edges.some((edge, index) =>
+        edges.slice(index + 1).some(
+          (other) =>
+            edge.faceIndex !== other.faceIndex &&
+            Math.abs(edge.normal.dot(other.normal)) >= tangentThreshold,
+        ),
+      )
+    ) {
+      smoothEdges.add(key);
+    }
+  }
+
+  return smoothEdges;
+}
+
+function createFaceBoundaryGeometries(
+  mesh: TriangleMesh,
+  smoothEdges: Set<string>,
+): Map<boolean, LineSegmentsGeometry> {
+  const positionsBySmoothness = new Map<boolean, number[]>([
+    [false, []],
+    [true, []],
+  ]);
+  for (const edge of createFaceBoundaryEdges(mesh)) {
+    const isSmooth = smoothEdges.has(getBoundaryEdgeKey(mesh, edge));
+    const positions = positionsBySmoothness.get(isSmooth)!;
     for (const vertex of [edge.start, edge.end]) {
       const offset = vertex * 3;
       positions.push(
@@ -148,21 +238,42 @@ function createFaceBoundaryGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
     }
   }
 
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(positions, 3),
-  );
-  geometry.computeBoundingSphere();
-  return geometry;
+  const geometries = new Map<boolean, LineSegmentsGeometry>();
+  for (const [isSmooth, positions] of positionsBySmoothness) {
+    if (positions.length === 0) continue;
+    geometries.set(
+      isSmooth,
+      new LineSegmentsGeometry().setPositions(positions),
+    );
+  }
+  return geometries;
+}
+
+function updateEdgeVisibility(
+  object: THREE.Object3D,
+  edgeThickness: number,
+  showSmoothEdges: boolean,
+): void {
+  const isSelectedHighlight = object.userData.isSelectionHighlight === true;
+  object.visible =
+    edgeThickness > 0 &&
+    (!object.userData.isSmoothEdge || showSmoothEdges) &&
+    (!isSelectedHighlight || object.userData.isSelected === true);
 }
 
 export function createGeometryGroup(
   meshes: TriangleMesh[],
   shadingMode: ShadingMode = "flat",
   opacity = DEFAULT_FACE_OPACITY,
+  edgeThickness = 1,
+  showSmoothEdges = true,
 ): THREE.Group {
   const group = new THREE.Group();
+  const clampedEdgeThickness = Math.max(
+    Number.isFinite(edgeThickness) ? edgeThickness : 0,
+    0,
+  );
+  const smoothEdges = findSmoothBoundaryEdges(meshes);
 
   for (const mesh of meshes) {
     const material = createFaceMaterial(shadingMode, FACE_COLOR, opacity);
@@ -170,37 +281,50 @@ export function createGeometryGroup(
     object.userData.faceIndex = mesh.faceIndex;
     group.add(object);
 
-    const boundary = new THREE.LineSegments(
-      createFaceBoundaryGeometry(mesh),
-      new THREE.LineBasicMaterial({
-        color: EDGE_COLOR,
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    boundary.visible = true;
-    boundary.renderOrder = 1;
-    boundary.userData.faceIndex = mesh.faceIndex;
-    group.add(boundary);
+    for (const [isSmooth, geometry] of createFaceBoundaryGeometries(
+      mesh,
+      smoothEdges,
+    )) {
+      const boundary = new LineSegments2(
+        geometry,
+        new LineMaterial({
+          color: EDGE_COLOR,
+          linewidth: clampedEdgeThickness,
+          transparent: true,
+          depthTest: false,
+          depthWrite: false,
+        }),
+      );
+      boundary.userData.isEdgeLine = true;
+      boundary.userData.faceIndex = mesh.faceIndex;
+      boundary.userData.isSmoothEdge = isSmooth;
+      boundary.renderOrder = 1;
+      updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
+      group.add(boundary);
 
-    const highlight = new THREE.LineSegments(
-      boundary.geometry,
-      new THREE.LineBasicMaterial({
-        color: SELECTED_EDGE_COLOR,
-        transparent: true,
-        linewidth: 1.5,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    highlight.visible = false;
-    highlight.renderOrder = 2;
-    highlight.userData.faceIndex = mesh.faceIndex;
-    highlight.userData.isSelectionHighlight = true;
-    group.add(highlight);
+      const highlight = new LineSegments2(
+        geometry,
+        new LineMaterial({
+          color: SELECTED_EDGE_COLOR,
+          linewidth: clampedEdgeThickness,
+          transparent: true,
+          depthTest: false,
+          depthWrite: false,
+        }),
+      );
+      highlight.userData.isEdgeLine = true;
+      highlight.userData.faceIndex = mesh.faceIndex;
+      highlight.userData.isSmoothEdge = isSmooth;
+      highlight.userData.isSelectionHighlight = true;
+      highlight.userData.isSelected = false;
+      highlight.renderOrder = 2;
+      updateEdgeVisibility(highlight, clampedEdgeThickness, showSmoothEdges);
+      group.add(highlight);
+    }
   }
 
+  group.userData.edgeThickness = clampedEdgeThickness;
+  group.userData.showSmoothEdges = showSmoothEdges;
   return group;
 }
 
@@ -273,6 +397,36 @@ export function setGeometryGroupOpacity(group: THREE.Group, opacity: number): vo
   });
 }
 
+export function setGeometryGroupEdgeThickness(
+  group: THREE.Group,
+  edgeThickness: number,
+): void {
+  const clampedThickness = Math.max(
+    Number.isFinite(edgeThickness) ? edgeThickness : 0,
+    0,
+  );
+  group.userData.edgeThickness = clampedThickness;
+  const showSmoothEdges = group.userData.showSmoothEdges !== false;
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || !object.userData.isEdgeLine) return;
+    const material = object.material as LineMaterial;
+    material.linewidth = clampedThickness;
+    updateEdgeVisibility(object, clampedThickness, showSmoothEdges);
+  });
+}
+
+export function setGeometryGroupSmoothEdgesVisible(
+  group: THREE.Group,
+  showSmoothEdges: boolean,
+): void {
+  group.userData.showSmoothEdges = showSmoothEdges;
+  const edgeThickness = group.userData.edgeThickness ?? 1;
+  group.traverse((object) => {
+    if (!object.userData.isEdgeLine) return;
+    updateEdgeVisibility(object, edgeThickness, showSmoothEdges);
+  });
+}
+
 export function updateFaceSelection(
   group: THREE.Group,
   selectedFaceIndices: Set<number>,
@@ -288,11 +442,15 @@ export function updateFaceSelection(
   }
 
   group.traverse((object) => {
-    if (
-      object instanceof THREE.LineSegments &&
-      object.userData.isSelectionHighlight
-    ) {
-      object.visible = nextSelection.has(object.userData.faceIndex);
+    if (object.userData.isEdgeLine) {
+      if (object.userData.isSelectionHighlight) {
+        object.userData.isSelected = nextSelection.has(object.userData.faceIndex);
+      }
+      updateEdgeVisibility(
+        object,
+        group.userData.edgeThickness ?? 1,
+        group.userData.showSmoothEdges !== false,
+      );
       return;
     }
 
@@ -320,6 +478,7 @@ export function raycastFaceIndex(
   group.traverse((object) => {
     if (
       object instanceof THREE.Mesh &&
+      !object.userData.isEdgeLine &&
       typeof object.userData.faceIndex === "number"
     ) {
       faceMeshes.push(object);
@@ -354,6 +513,8 @@ export function createStepRenderer(
   setProjection(projection: CameraProjection): void;
   setShadingMode(shadingMode: ShadingMode): void;
   setOpacity(opacity: number): void;
+  setEdgeThickness(edgeThickness: number): void;
+  setShowSmoothEdges(showSmoothEdges: boolean): void;
   getSelectedFaces(): number[];
   dispose(): void;
 } {
@@ -383,6 +544,8 @@ export function createStepRenderer(
   let selectedFaceIndices = new Set<number>();
   let shadingMode: ShadingMode = "flat";
   let faceOpacity = DEFAULT_FACE_OPACITY;
+  let edgeThickness = 1;
+  let showSmoothEdges = true;
   let animationFrame = 0;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -393,6 +556,11 @@ export function createStepRenderer(
     const height = Math.max(container.clientHeight, 1);
     renderer.setSize(width, height);
     aspect = width / height;
+    geometryGroup?.traverse((object) => {
+      if (object instanceof THREE.Mesh && object.userData.isEdgeLine) {
+        (object.material as LineMaterial).resolution.set(width, height);
+      }
+    });
     if (camera instanceof THREE.PerspectiveCamera) {
       camera.aspect = aspect;
     } else if (camera instanceof THREE.OrthographicCamera) {
@@ -490,6 +658,23 @@ export function createStepRenderer(
     if (geometryGroup) setGeometryGroupOpacity(geometryGroup, faceOpacity);
   };
 
+  const setEdgeThickness = (nextEdgeThickness: number) => {
+    edgeThickness = Math.max(
+      Number.isFinite(nextEdgeThickness) ? nextEdgeThickness : 0,
+      0,
+    );
+    if (geometryGroup) {
+      setGeometryGroupEdgeThickness(geometryGroup, edgeThickness);
+    }
+  };
+
+  const setShowSmoothEdges = (nextShowSmoothEdges: boolean) => {
+    showSmoothEdges = nextShowSmoothEdges;
+    if (geometryGroup) {
+      setGeometryGroupSmoothEdgesVisible(geometryGroup, showSmoothEdges);
+    }
+  };
+
   const selectFace = (faceIndex?: number) => {
     selectedFaceIndices = geometryGroup
       ? updateFaceSelection(geometryGroup, selectedFaceIndices, faceIndex)
@@ -532,8 +717,22 @@ export function createStepRenderer(
       disposeGeometryGroup(geometryGroup);
     }
 
-    geometryGroup = createGeometryGroup(meshes, shadingMode, faceOpacity);
+    geometryGroup = createGeometryGroup(
+      meshes,
+      shadingMode,
+      faceOpacity,
+      edgeThickness,
+      showSmoothEdges,
+    );
     scene.add(geometryGroup);
+    geometryGroup.traverse((object) => {
+      if (object instanceof THREE.Mesh && object.userData.isEdgeLine) {
+        (object.material as LineMaterial).resolution.set(
+          Math.max(container.clientWidth, 1),
+          Math.max(container.clientHeight, 1),
+        );
+      }
+    });
     selectFace();
     fitToView();
   };
@@ -554,6 +753,8 @@ export function createStepRenderer(
     setProjection,
     setShadingMode,
     setOpacity,
+    setEdgeThickness,
+    setShowSmoothEdges,
     getSelectedFaces: () => [...selectedFaceIndices],
     dispose() {
       window.cancelAnimationFrame(animationFrame);

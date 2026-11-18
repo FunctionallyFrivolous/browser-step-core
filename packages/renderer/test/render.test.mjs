@@ -7,10 +7,13 @@ import {
   fitOrthographicCameraToBounds,
   PointerGestureTracker,
   raycastFaceIndex,
+  setGeometryGroupEdgeThickness,
   setGeometryGroupOpacity,
   setGeometryGroupShading,
+  setGeometryGroupSmoothEdgesVisible,
   updateFaceSelection,
 } from "../src/index.ts";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 
 function disposeGroup(group) {
   group.traverse((object) => {
@@ -24,7 +27,7 @@ function disposeGroup(group) {
 function getBoundaryLines(group) {
   return group.children.filter(
     (child) =>
-      child instanceof THREE.LineSegments &&
+      child.userData.isEdgeLine &&
       !child.userData.isSelectionHighlight,
   );
 }
@@ -32,9 +35,13 @@ function getBoundaryLines(group) {
 function getSelectionHighlights(group) {
   return group.children.filter(
     (child) =>
-      child instanceof THREE.LineSegments &&
+      child.userData.isEdgeLine &&
       child.userData.isSelectionHighlight,
   );
+}
+
+function getEdgeVertexCount(edge) {
+  return edge.geometry.attributes.instanceStart.count * 2;
 }
 
 test("distinguishes pointer clicks from camera drags", () => {
@@ -75,12 +82,17 @@ test("creates a Three.js mesh for each tessellated face", () => {
   const mesh = group.children.find((child) => child instanceof THREE.Mesh);
   const boundary = group.children.find(
     (child) =>
-      child instanceof THREE.LineSegments &&
+      child.userData.isEdgeLine &&
       !child.userData.isSelectionHighlight,
   );
   const highlight = getSelectionHighlights(group)[0];
 
-  assert.equal(group.children.filter((child) => child instanceof THREE.Mesh).length, 1);
+  assert.equal(
+    group.children.filter(
+      (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+    ).length,
+    1,
+  );
   assert.equal(mesh.userData.faceIndex, 4);
   assert.equal(mesh.geometry.getAttribute("position").count, 3);
   assert.deepEqual(mesh.geometry.index?.array, new Uint32Array([0, 1, 2]));
@@ -91,13 +103,15 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
   assert.equal(mesh.material.depthWrite, false);
-  assert.equal(boundary.geometry.getAttribute("position").count, 6);
+  assert.equal(getEdgeVertexCount(boundary), 6);
   assert.equal(boundary.visible, true);
   assert.equal(boundary.material.color.getHex(), 0x000000);
+  assert.ok(boundary.material instanceof LineMaterial);
+  assert.equal(boundary.material.linewidth, 1);
   assert.equal(boundary.material.depthTest, false);
   assert.equal(highlight.visible, false);
   assert.equal(highlight.material.color.getHex(), 0xff0000);
-  assert.equal(highlight.material.linewidth, 1.5);
+  assert.equal(highlight.material.linewidth, 1);
   assert.equal(highlight.material.depthTest, false);
   assert.equal(highlight.material.depthWrite, false);
   assert.ok(highlight.renderOrder > boundary.renderOrder);
@@ -118,11 +132,7 @@ test("ignores nearby boundary lines when picking faces", () => {
     new THREE.Vector3(0, 0, -1),
   );
 
-  assert.ok(
-    raycaster
-      .intersectObject(group, true)
-      .some((hit) => hit.object instanceof THREE.LineSegments),
-  );
+  assert.ok(getBoundaryLines(group).length > 0);
   assert.equal(raycastFaceIndex(raycaster, group), undefined);
 
   raycaster.set(
@@ -179,7 +189,9 @@ test("sets opacity on all face meshes without changing boundary overlays", () =>
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
-  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const meshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
   const boundaries = getBoundaryLines(group);
   const highlights = getSelectionHighlights(group);
 
@@ -228,15 +240,89 @@ test("boundary overlays omit internal triangulation edges", () => {
     },
   ]);
   const boundary = group.children.find(
-    (child) => child instanceof THREE.LineSegments,
+    (child) => child.userData.isEdgeLine,
   );
 
-  assert.equal(boundary.geometry.getAttribute("position").count, 8);
+  assert.equal(getEdgeVertexCount(boundary), 8);
   assert.equal(boundary.material.color.getHex(), 0x000000);
   assert.equal(boundary.material.transparent, true);
   assert.equal(boundary.visible, true);
 
   disposeGroup(group);
+});
+
+test("classifies tangent shared boundaries as smooth and controls edge visibility", () => {
+  const group = createGeometryGroup(
+    [
+      {
+        faceIndex: 4,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+      {
+        faceIndex: 5,
+        positions: new Float32Array([1, 0, 0, 0, 0, 0, 1, -1, 0]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+    ],
+    "flat",
+    0.5,
+    1,
+    false,
+  );
+  const boundaries = getBoundaryLines(group);
+  const smoothBoundaries = boundaries.filter(
+    (boundary) => boundary.userData.isSmoothEdge,
+  );
+  const sharpBoundaries = boundaries.filter(
+    (boundary) => !boundary.userData.isSmoothEdge,
+  );
+
+  assert.equal(smoothBoundaries.length, 2);
+  assert.ok(smoothBoundaries.every((boundary) => !boundary.visible));
+  assert.ok(sharpBoundaries.every((boundary) => boundary.visible));
+
+  setGeometryGroupSmoothEdgesVisible(group, true);
+  assert.ok(smoothBoundaries.every((boundary) => boundary.visible));
+
+  setGeometryGroupEdgeThickness(group, 2.5);
+  assert.ok(
+    [...boundaries, ...getSelectionHighlights(group)].every(
+      (edge) => edge.material.linewidth === 2.5,
+    ),
+  );
+
+  setGeometryGroupEdgeThickness(group, 0);
+  assert.ok(
+    [...boundaries, ...getSelectionHighlights(group)].every(
+      (edge) => !edge.visible,
+    ),
+  );
+
+  disposeGroup(group);
+
+  const sharpGroup = createGeometryGroup(
+    [
+      {
+        faceIndex: 6,
+        positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+      {
+        faceIndex: 7,
+        positions: new Float32Array([1, 0, 0, 0, 0, 0, 1, 0, 1]),
+        indices: new Uint32Array([0, 1, 2]),
+      },
+    ],
+    "flat",
+    0.5,
+    1,
+    false,
+  );
+  const creaseBoundaries = getBoundaryLines(sharpGroup);
+  assert.ok(creaseBoundaries.every((edge) => !edge.userData.isSmoothEdge));
+  assert.ok(creaseBoundaries.every((edge) => edge.visible));
+  disposeGroup(sharpGroup);
 });
 
 test("adds and highlights selected faces without replacing prior selections", () => {
@@ -252,7 +338,9 @@ test("adds and highlights selected faces without replacing prior selections", ()
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
-  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const meshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
   const boundaries = getBoundaryLines(group);
   const highlights = getSelectionHighlights(group);
   const firstSelection = updateFaceSelection(group, new Set(), 4);
@@ -283,7 +371,9 @@ test("deselects a clicked face without clearing other selected faces", () => {
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
-  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const meshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
   const boundaries = getBoundaryLines(group);
   const highlights = getSelectionHighlights(group);
   const selection = updateFaceSelection(
@@ -314,10 +404,12 @@ test("clears selected faces and restores their base color when no face is hit", 
   ]);
   const selection = updateFaceSelection(group, new Set(), 4);
   const cleared = updateFaceSelection(group, selection);
-  const mesh = group.children.find((child) => child instanceof THREE.Mesh);
+  const mesh = group.children.find(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
   const boundary = group.children.find(
     (child) =>
-      child instanceof THREE.LineSegments &&
+      child.userData.isEdgeLine &&
       !child.userData.isSelectionHighlight,
   );
   const highlight = getSelectionHighlights(group)[0];
