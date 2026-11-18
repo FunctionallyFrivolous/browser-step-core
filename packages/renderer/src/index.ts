@@ -7,6 +7,41 @@ export interface TriangleMesh {
   faceIndex: number;
 }
 
+export class PointerGestureTracker {
+  private readonly pointerStarts = new Map<
+    number,
+    { x: number; y: number }
+  >();
+  private dragged = false;
+
+  start(pointerId: number, x: number, y: number): void {
+    if (this.pointerStarts.size === 0) this.dragged = false;
+    this.pointerStarts.set(pointerId, { x, y });
+  }
+
+  move(pointerId: number, x: number, y: number): void {
+    const start = this.pointerStarts.get(pointerId);
+    if (!start) return;
+
+    const deltaX = x - start.x;
+    const deltaY = y - start.y;
+    if (deltaX * deltaX + deltaY * deltaY > 5 ** 2) {
+      this.dragged = true;
+    }
+  }
+
+  end(pointerId: number, x: number, y: number): void {
+    this.move(pointerId, x, y);
+    this.pointerStarts.delete(pointerId);
+  }
+
+  consumeDrag(): boolean {
+    const dragged = this.dragged;
+    this.dragged = false;
+    return dragged;
+  }
+}
+
 const FACE_COLOR = 0x9caec2;
 const SELECTED_FACE_COLOR = 0xffc7c7;
 const SELECTED_EDGE_COLOR = 0x8b0000;
@@ -195,6 +230,7 @@ export function createStepRenderer(
   let animationFrame = 0;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
+  const pointerGestures = new PointerGestureTracker();
 
   const resize = () => {
     const width = Math.max(container.clientWidth, 1);
@@ -226,6 +262,7 @@ export function createStepRenderer(
   };
 
   const handleCanvasClick = (event: MouseEvent) => {
+    if (pointerGestures.consumeDrag()) return;
     if (!geometryGroup) return;
 
     const bounds = renderer.domElement.getBoundingClientRect();
@@ -238,6 +275,18 @@ export function createStepRenderer(
       .intersectObject(geometryGroup, true)
       .find((hit) => typeof hit.object.userData.faceIndex === "number");
     selectFace(intersection?.object.userData.faceIndex);
+  };
+
+  const handlePointerDown = (event: PointerEvent) => {
+    pointerGestures.start(event.pointerId, event.clientX, event.clientY);
+  };
+
+  const handlePointerMove = (event: PointerEvent) => {
+    pointerGestures.move(event.pointerId, event.clientX, event.clientY);
+  };
+
+  const handlePointerEnd = (event: PointerEvent) => {
+    pointerGestures.end(event.pointerId, event.clientX, event.clientY);
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -258,6 +307,10 @@ export function createStepRenderer(
 
   resize();
   window.addEventListener("resize", resize);
+  renderer.domElement.addEventListener("pointerdown", handlePointerDown);
+  window.addEventListener("pointermove", handlePointerMove);
+  window.addEventListener("pointerup", handlePointerEnd);
+  window.addEventListener("pointercancel", handlePointerEnd);
   renderer.domElement.addEventListener("click", handleCanvasClick);
   window.addEventListener("keydown", handleKeyDown);
   draw();
@@ -269,6 +322,10 @@ export function createStepRenderer(
     dispose() {
       window.cancelAnimationFrame(animationFrame);
       window.removeEventListener("resize", resize);
+      renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerEnd);
+      window.removeEventListener("pointercancel", handlePointerEnd);
       renderer.domElement.removeEventListener("click", handleCanvasClick);
       window.removeEventListener("keydown", handleKeyDown);
       controls.dispose();
