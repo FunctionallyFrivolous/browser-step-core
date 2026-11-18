@@ -7,6 +7,15 @@ import {
   updateFaceSelection,
 } from "../src/index.ts";
 
+function disposeGroup(group) {
+  group.traverse((object) => {
+    if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
+      object.geometry.dispose();
+      object.material.dispose();
+    }
+  });
+}
+
 test("creates a Three.js mesh for each tessellated face", () => {
   const group = createGeometryGroup([
     {
@@ -15,16 +24,43 @@ test("creates a Three.js mesh for each tessellated face", () => {
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
-  const mesh = group.children[0];
+  const mesh = group.children.find((child) => child instanceof THREE.Mesh);
+  const boundary = group.children.find(
+    (child) => child instanceof THREE.LineSegments,
+  );
 
-  assert.equal(group.children.length, 1);
+  assert.equal(group.children.filter((child) => child instanceof THREE.Mesh).length, 1);
   assert.equal(mesh.userData.faceIndex, 4);
   assert.equal(mesh.geometry.getAttribute("position").count, 3);
   assert.deepEqual(mesh.geometry.index?.array, new Uint32Array([0, 1, 2]));
   assert.equal(mesh.geometry.getAttribute("normal").count, 3);
+  assert.equal(boundary.geometry.getAttribute("position").count, 6);
+  assert.equal(boundary.visible, false);
 
-  mesh.geometry.dispose();
-  mesh.material.dispose();
+  disposeGroup(group);
+});
+
+test("boundary overlays omit internal triangulation edges", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([
+        0, 0, 0,
+        1, 0, 0,
+        1, 1, 0,
+        0, 1, 0,
+      ]),
+      indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+    },
+  ]);
+  const boundary = group.children.find(
+    (child) => child instanceof THREE.LineSegments,
+  );
+
+  assert.equal(boundary.geometry.getAttribute("position").count, 8);
+  assert.equal(boundary.material.color.getHex(), 0x8b0000);
+
+  disposeGroup(group);
 });
 
 test("adds and highlights selected faces without replacing prior selections", () => {
@@ -40,17 +76,19 @@ test("adds and highlights selected faces without replacing prior selections", ()
       indices: new Uint32Array([0, 1, 2]),
     },
   ]);
+  const meshes = group.children.filter((child) => child instanceof THREE.Mesh);
+  const boundaries = group.children.filter(
+    (child) => child instanceof THREE.LineSegments,
+  );
   const firstSelection = updateFaceSelection(group, new Set(), 4);
   const selected = updateFaceSelection(group, firstSelection, 5);
 
   assert.deepEqual([...selected], [4, 5]);
-  assert.ok(group.children.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
-  assert.notEqual(group.children[0].material, group.children[1].material);
+  assert.ok(meshes.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
+  assert.notEqual(meshes[0].material, meshes[1].material);
+  assert.ok(boundaries.every((boundary) => boundary.visible));
 
-  group.children.forEach((mesh) => {
-    mesh.geometry.dispose();
-    mesh.material.dispose();
-  });
+  disposeGroup(group);
 });
 
 test("clears selected faces and restores their base color when no face is hit", () => {
@@ -63,12 +101,16 @@ test("clears selected faces and restores their base color when no face is hit", 
   ]);
   const selection = updateFaceSelection(group, new Set(), 4);
   const cleared = updateFaceSelection(group, selection);
+  const mesh = group.children.find((child) => child instanceof THREE.Mesh);
+  const boundary = group.children.find(
+    (child) => child instanceof THREE.LineSegments,
+  );
 
   assert.equal(cleared.size, 0);
-  assert.equal(group.children[0].material.color.getHex(), 0x9caec2);
+  assert.equal(mesh.material.color.getHex(), 0x9caec2);
+  assert.equal(boundary.visible, false);
 
-  group.children[0].geometry.dispose();
-  group.children[0].material.dispose();
+  disposeGroup(group);
 });
 
 test("fits the camera around the bounds center with viewport padding", () => {

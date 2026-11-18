@@ -9,6 +9,7 @@ export interface TriangleMesh {
 
 const FACE_COLOR = 0x9caec2;
 const SELECTED_FACE_COLOR = 0xffc7c7;
+const SELECTED_EDGE_COLOR = 0x8b0000;
 
 export function fitCameraToBounds(
   camera: THREE.PerspectiveCamera,
@@ -44,6 +45,51 @@ export function createFaceGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
   return geometry;
 }
 
+function createFaceBoundaryGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
+  const edges = new Map<string, { start: number; end: number; count: number }>();
+
+  const addEdge = (start: number, end: number) => {
+    const key = `${Math.min(start, end)}:${Math.max(start, end)}`;
+    const edge = edges.get(key);
+    if (edge) {
+      edge.count += 1;
+    } else {
+      edges.set(key, { start, end, count: 1 });
+    }
+  };
+
+  for (let index = 0; index < mesh.indices.length; index += 3) {
+    const first = mesh.indices[index];
+    const second = mesh.indices[index + 1];
+    const third = mesh.indices[index + 2];
+    addEdge(first, second);
+    addEdge(second, third);
+    addEdge(third, first);
+  }
+
+  const positions: number[] = [];
+  for (const edge of edges.values()) {
+    if (edge.count !== 1) continue;
+
+    for (const vertex of [edge.start, edge.end]) {
+      const offset = vertex * 3;
+      positions.push(
+        mesh.positions[offset],
+        mesh.positions[offset + 1],
+        mesh.positions[offset + 2],
+      );
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 export function createGeometryGroup(meshes: TriangleMesh[]): THREE.Group {
   const group = new THREE.Group();
 
@@ -56,6 +102,15 @@ export function createGeometryGroup(meshes: TriangleMesh[]): THREE.Group {
     const object = new THREE.Mesh(createFaceGeometry(mesh), material);
     object.userData.faceIndex = mesh.faceIndex;
     group.add(object);
+
+    const boundary = new THREE.LineSegments(
+      createFaceBoundaryGeometry(mesh),
+      new THREE.LineBasicMaterial({ color: SELECTED_EDGE_COLOR }),
+    );
+    boundary.visible = false;
+    boundary.renderOrder = 1;
+    boundary.userData.faceIndex = mesh.faceIndex;
+    group.add(boundary);
   }
 
   return group;
@@ -72,6 +127,10 @@ export function updateFaceSelection(
       : new Set([...selectedFaceIndices, faceIndex]);
 
   group.traverse((object) => {
+    if (object instanceof THREE.LineSegments) {
+      object.visible = nextSelection.has(object.userData.faceIndex);
+      return;
+    }
     if (!(object instanceof THREE.Mesh) || Array.isArray(object.material)) return;
     if (!("color" in object.material)) return;
 
@@ -90,7 +149,7 @@ function disposeGeometryGroup(group: THREE.Group): void {
   const materials = new Set<THREE.Material>();
 
   group.traverse((object) => {
-    if (object instanceof THREE.Mesh) {
+    if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
       object.geometry.dispose();
       const meshMaterials = Array.isArray(object.material)
         ? object.material
