@@ -8,6 +8,7 @@ export interface TriangleMesh {
 }
 
 export type CameraProjection = "orthographic" | "perspective";
+export type ShadingMode = "flat" | "original";
 
 export class PointerGestureTracker {
   private readonly pointerStarts = new Map<
@@ -154,15 +155,14 @@ function createFaceBoundaryGeometry(mesh: TriangleMesh): THREE.BufferGeometry {
   return geometry;
 }
 
-export function createGeometryGroup(meshes: TriangleMesh[]): THREE.Group {
+export function createGeometryGroup(
+  meshes: TriangleMesh[],
+  shadingMode: ShadingMode = "flat",
+): THREE.Group {
   const group = new THREE.Group();
 
   for (const mesh of meshes) {
-    const material = new THREE.MeshStandardMaterial({
-      color: FACE_COLOR,
-      metalness: 0.1,
-      roughness: 0.65,
-    });
+    const material = createFaceMaterial(shadingMode, FACE_COLOR);
     const object = new THREE.Mesh(createFaceGeometry(mesh), material);
     object.userData.faceIndex = mesh.faceIndex;
     group.add(object);
@@ -178,6 +178,44 @@ export function createGeometryGroup(meshes: TriangleMesh[]): THREE.Group {
   }
 
   return group;
+}
+
+function createFaceMaterial(
+  shadingMode: ShadingMode,
+  color: number,
+): THREE.MeshBasicMaterial | THREE.MeshStandardMaterial {
+  if (shadingMode === "flat") {
+    return new THREE.MeshBasicMaterial({ color });
+  }
+  return new THREE.MeshStandardMaterial({
+    color,
+    metalness: 0.1,
+    roughness: 0.65,
+  });
+}
+
+export function setGeometryGroupShading(
+  group: THREE.Group,
+  shadingMode: ShadingMode,
+  selectedFaceIndices: Set<number> = new Set(),
+): void {
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+
+    const previousMaterial = object.material;
+    if (
+      !(previousMaterial instanceof THREE.MeshBasicMaterial) &&
+      !(previousMaterial instanceof THREE.MeshStandardMaterial)
+    ) {
+      return;
+    }
+
+    const color = selectedFaceIndices.has(object.userData.faceIndex)
+      ? SELECTED_FACE_COLOR
+      : FACE_COLOR;
+    object.material = createFaceMaterial(shadingMode, color);
+    previousMaterial.dispose();
+  });
 }
 
 export function updateFaceSelection(
@@ -202,7 +240,9 @@ export function updateFaceSelection(
     if (!(object instanceof THREE.Mesh) || Array.isArray(object.material)) return;
     if (!("color" in object.material)) return;
 
-    const material = object.material as THREE.MeshStandardMaterial;
+    const material = object.material as
+      | THREE.MeshBasicMaterial
+      | THREE.MeshStandardMaterial;
     material.color.set(
       nextSelection.has(object.userData.faceIndex)
         ? SELECTED_FACE_COLOR
@@ -236,6 +276,7 @@ export function createStepRenderer(
   renderMeshes(meshes: TriangleMesh[]): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
+  setShadingMode(shadingMode: ShadingMode): void;
   getSelectedFaces(): number[];
   dispose(): void;
 } {
@@ -263,6 +304,7 @@ export function createStepRenderer(
   controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
   let selectedFaceIndices = new Set<number>();
+  let shadingMode: ShadingMode = "flat";
   let animationFrame = 0;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -352,6 +394,14 @@ export function createStepRenderer(
     controls.update();
   };
 
+  const setShadingMode = (nextShadingMode: ShadingMode) => {
+    if (shadingMode === nextShadingMode) return;
+    shadingMode = nextShadingMode;
+    if (geometryGroup) {
+      setGeometryGroupShading(geometryGroup, shadingMode, selectedFaceIndices);
+    }
+  };
+
   const selectFace = (faceIndex?: number) => {
     selectedFaceIndices = geometryGroup
       ? updateFaceSelection(geometryGroup, selectedFaceIndices, faceIndex)
@@ -397,7 +447,7 @@ export function createStepRenderer(
       disposeGeometryGroup(geometryGroup);
     }
 
-    geometryGroup = createGeometryGroup(meshes);
+    geometryGroup = createGeometryGroup(meshes, shadingMode);
     scene.add(geometryGroup);
     selectFace();
     fitToView();
@@ -417,6 +467,7 @@ export function createStepRenderer(
     renderMeshes,
     fitToView,
     setProjection,
+    setShadingMode,
     getSelectedFaces: () => [...selectedFaceIndices],
     dispose() {
       window.cancelAnimationFrame(animationFrame);

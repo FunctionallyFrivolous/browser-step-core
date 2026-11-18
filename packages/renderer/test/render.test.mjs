@@ -6,6 +6,7 @@ import {
   fitCameraToBounds,
   fitOrthographicCameraToBounds,
   PointerGestureTracker,
+  setGeometryGroupShading,
   updateFaceSelection,
 } from "../src/index.ts";
 
@@ -63,8 +64,34 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(mesh.geometry.getAttribute("position").count, 3);
   assert.deepEqual(mesh.geometry.index?.array, new Uint32Array([0, 1, 2]));
   assert.equal(mesh.geometry.getAttribute("normal").count, 3);
+  assert.ok(mesh.material instanceof THREE.MeshBasicMaterial);
+  assert.equal(mesh.material.color.getHex(), 0x9caec2);
   assert.equal(boundary.geometry.getAttribute("position").count, 6);
   assert.equal(boundary.visible, false);
+
+  disposeGroup(group);
+});
+
+test("switches between flat and original shading while preserving selection", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const mesh = group.children.find((child) => child instanceof THREE.Mesh);
+  const selectedFaceIndices = new Set([4]);
+
+  setGeometryGroupShading(group, "original", selectedFaceIndices);
+  assert.ok(mesh.material instanceof THREE.MeshStandardMaterial);
+  assert.equal(mesh.material.color.getHex(), 0xffc7c7);
+  assert.equal(mesh.material.metalness, 0.1);
+  assert.equal(mesh.material.roughness, 0.65);
+
+  setGeometryGroupShading(group, "flat", selectedFaceIndices);
+  assert.ok(mesh.material instanceof THREE.MeshBasicMaterial);
+  assert.equal(mesh.material.color.getHex(), 0xffc7c7);
 
   disposeGroup(group);
 });
