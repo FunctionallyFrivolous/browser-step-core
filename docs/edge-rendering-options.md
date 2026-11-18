@@ -4,8 +4,9 @@
 
 ## Scope and current implementation
 
-This report evaluates edge visibility for the current Three.js STEP viewer. It
-does not change rendering behavior. OpenCascade BRep remains authoritative;
+This report evaluates edge visibility for the current Three.js STEP viewer.
+The experiment changes regular edge depth testing only; it does not introduce a
+permanent rendering architecture. OpenCascade BRep remains authoritative;
 Three.js meshes and lines are derived display geometry, as described in
 [`architecture.md`](architecture.md#source-of-truth).
 
@@ -17,23 +18,22 @@ with the scene but do not add their depths to the depth buffer.
 
 Boundary geometry is generated from face mesh boundaries and rendered with
 `LineSegments2` and `LineMaterial`. The regular boundary material is currently
-opaque (`transparent: false`), but disables both depth testing and depth
-writing. It is consequently drawn without regard to intervening face depth,
-which explains edges appearing through or in front of faces. Selection
-highlights also bypass depth testing, intentionally making them overlays.
-`renderOrder` affects draw ordering, not whether a fragment passes the depth
-test.
+opaque (`transparent: false`), with depth testing enabled and depth writing
+disabled. Selection highlights bypass depth testing, intentionally making
+them overlays. `renderOrder` affects draw ordering, not whether a fragment
+passes the depth test.
 
-There is a source/test mismatch to resolve before treating tests as a rendering
-contract: `packages/renderer/test/render.test.mjs` currently expects the regular
-boundary material to have `depthTest: true`, while `createGeometryGroup` sets it
-to `false`. This report describes the implementation, not that assertion.
+The renderer tests assert material properties, but they do not measure rendered
+visibility. The browser experiment below provides qualitative evidence for one
+bundled model and should not be treated as a general hidden-line correctness
+test.
 
 ## Root causes
 
 - **Depth testing controls occlusion.** With depth testing disabled, line
   fragments are not rejected when a nearer face is already in the depth
-  buffer. Changing edge opacity or render order cannot restore that occlusion.
+  buffer. Enabling it rejects hidden edges when nearer geometry has written
+  depth; changing edge opacity or render order cannot restore that occlusion.
 - **Depth writing controls what later geometry can occlude.** Translucent face
   materials in this renderer do not write depth. Even if boundary depth testing
   were enabled, those faces would not provide depth values that reliably hide
@@ -56,6 +56,35 @@ to `false`. This report describes the implementation, not that assertion.
   are. That exposes bypassed depth tests, imperfect transparency sorting, or
   coplanar precision problems; camera angle is a symptom amplifier rather than
   an independent visibility rule.
+
+## Edge visibility experiment
+
+The variants were exercised in Chromium's software-WebGL browser using the
+bundled `apps/viewer/src/GDT_Hole_Str.step` model (one body, 12 faces). The model
+was fit to the viewport, inspected at the default 50% opacity and at 100%, then
+rotated to a narrow side view. These observations are qualitative and cover a
+single model and a small set of views.
+
+| Variant | Tested state | Findings |
+|---|---|---|
+| 1 | Edges `depthTest: true`, `depthWrite: false`; face behavior unchanged; no prepass | At 50% opacity, rear/interior edges remain visible through faces because transparent faces do not write depth. At 100%, face depth writes occlude rear edges. No obvious popping was observed in the tested views, but this does not establish stability across grazing angles or other models. |
+| 2 | Same edge state; faces forced to `depthWrite: true`; temporary depth-only face prepass enabled | Rear linework around the through-hole remained visible. The face's blend appeared lighter where the prepass suppressed additional transparent-surface layers. The sample did not establish complete hidden-edge correctness; a prepass changes which transparent surfaces contribute depth and can suppress expected see-through layering. |
+| 3 | Same edge state and forced face depth writes as variant 2; prepass disabled | At 50% opacity, rear linework still shows through. Face depth writes alone do not help edges already rendered before the transparent face pass. Compared with the temporary prepass, the face retained more of its transparent layering. |
+
+Across the tested states, selecting the front face continued to show its red
+outline from a rotated view. This is expected because selection highlights
+remain depth-test-disabled overlays; selection visibility is therefore
+independent of regular edge occlusion. The narrow-side view also exposed
+closely spaced boundary lines at a face transition. More representative models
+and controlled grazing-angle checks are needed to determine whether those are
+actual self-occlusion artifacts or distinct model edges.
+
+**Finding:** Variant 1 is a useful narrow improvement: it restores depth
+occlusion against opaque faces, but cannot hide edges through the viewer's
+default translucent faces. Variant 3 confirms that setting face `depthWrite`
+alone is insufficient. The temporary variant-2 prepass did not establish
+complete visibility correctness and is not retained as a rendering
+architecture.
 
 ## Approaches
 
@@ -146,10 +175,12 @@ viewer.
 
 - **Current project stage:** Prefer **B, a depth prepass followed by a
   depth-tested edge pass**, with **A** used only to handle coplanar edge/face
-  precision. It addresses the immediate visibility problem without requiring a
-  BRep edge-classification system. Keep selection highlights as an explicitly
-  separate overlay if their always-visible behavior is desired. Treat
-  transparent face color sorting as a separate limitation.
+  precision, as the next candidate to validate—not as an established solution.
+  This single-model experiment does not justify a permanent prepass. Keep the
+  tested depth-tested edge state for opaque-face occlusion, and add controlled
+  overlapping-face fixtures and grazing-angle checks before choosing prepass
+  depth participation for translucent faces. Keep selection highlights as an
+  explicitly separate overlay if their always-visible behavior is desired.
 - **Future CAD platform:** Evolve toward **C**, using the depth prepass as a
   screen-space visibility foundation and adding BRep-aware classification for
   silhouette and hidden-line semantics as product requirements justify it.

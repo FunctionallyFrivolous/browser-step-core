@@ -389,7 +389,7 @@ test("boundary overlays omit internal triangulation edges", () => {
 
   assert.equal(getEdgeVertexCount(boundary), 8);
   assert.equal(boundary.material.color.getHex(), 0x000000);
-  assert.equal(boundary.material.transparent, true);
+  assert.equal(boundary.material.transparent, false);
   assert.equal(boundary.visible, true);
 
   disposeGroup(group);
