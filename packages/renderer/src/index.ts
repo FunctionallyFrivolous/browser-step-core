@@ -359,7 +359,7 @@ export function createGeometryGroup(
         new LineMaterial({
           color: EDGE_COLOR,
           linewidth: clampedEdgeThickness,
-          transparent: true,
+          transparent: false,
           depthTest: true,
           depthWrite: false,
         }),
