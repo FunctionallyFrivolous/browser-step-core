@@ -117,7 +117,13 @@ selectionStatus.textContent = "0 faces selected";
 const viewport = document.createElement("div");
 viewport.className = "viewport";
 
-app.append(
+const viewer = document.createElement("section");
+viewer.className = "viewer";
+viewer.append(status, selectionStatus, viewport);
+
+const controls = document.createElement("section");
+controls.className = "controls";
+controls.append(
   heading,
   fileInput,
   sampleSelect,
@@ -129,10 +135,9 @@ app.append(
   opacityControl,
   edgeThicknessControl,
   smoothEdgesControl,
-  status,
-  selectionStatus,
-  viewport,
 );
+
+app.append(viewer, controls);
 
 const session = new ModelSession();
 const commandManager = new CommandManager();
