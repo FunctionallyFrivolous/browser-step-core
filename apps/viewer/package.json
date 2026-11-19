@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@browser-step/core": "*",
-    "@browser-step/renderer": "*"
+    "@browser-step/renderer": "*",
+    "@browser-step/samples": "*"
   }
 }
