@@ -40,6 +40,8 @@ the selected branch with preview-specific asset paths and builds production from
 subsequent production and preview deployments. The workflow requires permission
 to write that branch and deploy to the `github-pages` environment. Do not use
 `pages-previews` as the Pages source or edit it manually.
+The branch build runs in a container without Actions credentials; artifacts
+containing symbolic links are rejected.
 
 Deployments share the Pages concurrency group. GitHub may replace an older
 pending run with a newer pending run; check the Actions result and rerun a

@@ -53,20 +53,25 @@ jobs:
         with:
           ref: refs/heads/${{ inputs.branch }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm ci
-      - run: npm run typecheck
       - name: Build preview applications
         env:
           PREVIEW_NAME: ${{ inputs.name }}
         run: |
-          npm run build --workspace @browser-step/viewer -- --base="/browser-step-core/previews/$PREVIEW_NAME/"
-          npm run build --workspace @browser-step/inspector -- --base="/browser-step-core/previews/$PREVIEW_NAME/inspector/"
-          mkdir -p preview/inspector
-          cp -R apps/viewer/dist/. preview/
-          cp -R apps/inspector/dist/. preview/inspector/
+          docker run --rm --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp --env PREVIEW_NAME \
+            --volume "$GITHUB_WORKSPACE:/workspace" --workdir /workspace node:22 bash -e -c '
+              npm ci
+              npm run typecheck
+              npm run build --workspace @browser-step/viewer -- --base="/browser-step-core/previews/$PREVIEW_NAME/"
+              npm run build --workspace @browser-step/inspector -- --base="/browser-step-core/previews/$PREVIEW_NAME/inspector/"
+              mkdir -p preview/inspector
+              cp -R apps/viewer/dist/. preview/
+              cp -R apps/inspector/dist/. preview/inspector/
+            '
+          if [ -n "$(find preview -type l -print -quit)" ]; then
+            echo "::error::Preview artifacts must not contain symbolic links."
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: branch-preview
