@@ -138,7 +138,6 @@ jobs:
               exit "$status"
             fi
             git switch --orphan pages-previews
-            git rm -rf .
           fi
           mkdir -p previews
           touch previews/.gitkeep
