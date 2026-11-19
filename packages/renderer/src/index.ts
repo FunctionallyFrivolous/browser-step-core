@@ -359,7 +359,7 @@ export function createGeometryGroup(
         new LineMaterial({
           color: EDGE_COLOR,
           linewidth: clampedEdgeThickness,
-          transparent: false,
+          transparent: true,
           depthTest: true,
           depthWrite: false,
         }),
@@ -367,7 +367,7 @@ export function createGeometryGroup(
       boundary.userData.isEdgeLine = true;
       boundary.userData.faceIndex = mesh.faceIndex;
       boundary.userData.isSmoothEdge = isSmooth;
-      boundary.renderOrder = 0;
+      boundary.renderOrder = 1;
       updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
       group.add(boundary);
 
@@ -604,6 +604,64 @@ function disposeGeometryGroup(group: THREE.Group): void {
   materials.forEach((material) => material.dispose());
 }
 
+export function renderSceneWithDepthPrepass(
+  renderer: Pick<THREE.WebGLRenderer, "clear" | "render">,
+  scene: THREE.Scene,
+  camera: THREE.Camera,
+  geometryGroup?: THREE.Group,
+): void {
+  renderer.clear(true, true, true);
+
+  if (!geometryGroup) {
+    renderer.render(scene, camera);
+    return;
+  }
+
+  const materialStates = new Map<
+    THREE.Material,
+    { colorWrite: boolean; depthWrite: boolean; transparent: boolean }
+  >();
+  const visibilityStates = new Map<THREE.Object3D, boolean>();
+
+  geometryGroup.traverse((object) => {
+    if (object.userData.isEdgeLine) {
+      visibilityStates.set(object, object.visible);
+      object.visible = false;
+      return;
+    }
+
+    if (!(object instanceof THREE.Mesh)) return;
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    for (const material of materials) {
+      materialStates.set(material, {
+        colorWrite: material.colorWrite,
+        depthWrite: material.depthWrite,
+        transparent: material.transparent,
+      });
+      material.colorWrite = false;
+      material.depthWrite = true;
+      material.transparent = false;
+    }
+  });
+
+  try {
+    renderer.render(scene, camera);
+  } finally {
+    for (const [material, state] of materialStates) {
+      material.colorWrite = state.colorWrite;
+      material.depthWrite = state.depthWrite;
+      material.transparent = state.transparent;
+    }
+    for (const [object, visible] of visibilityStates) {
+      object.visible = visible;
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
 export function createStepRenderer(
   container: HTMLElement,
   onPick: (faceIndex: number | undefined) => void = () => {},
@@ -628,6 +686,7 @@ export function createStepRenderer(
     new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
   camera.position.set(1.8, 1.8, 2.4);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.autoClear = false;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.append(renderer.domElement);
@@ -681,7 +740,7 @@ export function createStepRenderer(
   const draw = () => {
     controls.update();
     onViewChange(getCameraViewState(camera, controls.target));
-    renderer.render(scene, camera);
+    renderSceneWithDepthPrepass(renderer, scene, camera, geometryGroup);
     animationFrame = window.requestAnimationFrame(draw);
   };
 

@@ -9,6 +9,7 @@ import {
   getCameraViewState,
   PointerGestureTracker,
   raycastFaceIndex,
+  renderSceneWithDepthPrepass,
   setGeometryGroupEdgeThickness,
   setGeometryGroupOpacity,
   setGeometryGroupShading,
@@ -174,6 +175,7 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(boundary.visible, true);
   assert.equal(boundary.material.color.getHex(), 0x000000);
   assert.ok(boundary.material instanceof LineMaterial);
+  assert.equal(boundary.material.transparent, true);
   assert.equal(boundary.material.linewidth, 1);
   assert.equal(boundary.material.depthTest, true);
   assert.equal(boundary.material.depthWrite, false);
@@ -182,7 +184,7 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(highlight.material.linewidth, 1);
   assert.equal(highlight.material.depthTest, false);
   assert.equal(highlight.material.depthWrite, false);
-  assert.equal(boundary.renderOrder, 0);
+  assert.equal(boundary.renderOrder, 1);
   assert.equal(mesh.renderOrder, 0);
   assert.ok(highlight.renderOrder > boundary.renderOrder);
 
@@ -389,8 +391,65 @@ test("boundary overlays omit internal triangulation edges", () => {
 
   assert.equal(getEdgeVertexCount(boundary), 8);
   assert.equal(boundary.material.color.getHex(), 0x000000);
-  assert.equal(boundary.material.transparent, false);
+  assert.equal(boundary.material.transparent, true);
   assert.equal(boundary.visible, true);
+
+  disposeGroup(group);
+});
+
+test("renders a depth-only face prepass before depth-tested edges", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  setGeometryGroupSelection(group, new Set([4]));
+  const face = group.children.find(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  const boundary = getBoundaryLines(group)[0];
+  const highlight = getSelectionHighlights(group)[0];
+  const scene = new THREE.Scene();
+  scene.add(group);
+  const camera = new THREE.PerspectiveCamera();
+  const passes = [];
+  const renderer = {
+    clear: (...args) => passes.push({ type: "clear", args }),
+    render: () => passes.push({
+      type: "render",
+      colorWrite: face.material.colorWrite,
+      depthWrite: face.material.depthWrite,
+      transparent: face.material.transparent,
+      boundaryVisible: boundary.visible,
+      highlightVisible: highlight.visible,
+    }),
+  };
+
+  renderSceneWithDepthPrepass(renderer, scene, camera, group);
+
+  assert.deepEqual(passes, [
+    { type: "clear", args: [true, true, true] },
+    {
+      type: "render",
+      colorWrite: false,
+      depthWrite: true,
+      transparent: false,
+      boundaryVisible: false,
+      highlightVisible: false,
+    },
+    {
+      type: "render",
+      colorWrite: true,
+      depthWrite: false,
+      transparent: true,
+      boundaryVisible: true,
+      highlightVisible: true,
+    },
+  ]);
+  assert.equal(boundary.material.depthTest, true);
+  assert.equal(highlight.material.depthTest, false);
 
   disposeGroup(group);
 });

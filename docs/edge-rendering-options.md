@@ -86,6 +86,33 @@ alone is insufficient. The temporary variant-2 prepass did not establish
 complete visibility correctness and is not retained as a rendering
 architecture.
 
+## Depth-prepass prototype
+
+The renderer now includes a per-frame prototype that clears color and depth,
+renders faces with color writes disabled and depth writes enabled, then draws
+face colors and regular edges without clearing the depth buffer. Regular edges
+remain depth-tested and are ordered after face color. Selection highlights are
+hidden only for the prepass and retain their existing depth-test-disabled
+overlay behavior in the final pass. Face materials keep the same polygon offset
+in both passes so their color fragments match their prepass depth while
+coplanar boundary lines can pass the depth test.
+
+In a local Chromium run with software WebGL, the bundled 12-face
+`GDT_Hole_Str.step` model was fitted and orbited through two views at the
+default 50% opacity. Its own boundary edges stayed visible, rear edges behind
+the foreground face were occluded, and the selected-face red outline remained
+visible. No obvious edge floating appeared in these views.
+
+The prepass includes translucent faces, so a foreground translucent face hides
+rear edges. It also writes depth for those faces: farther translucent face
+fragments fail the color-pass depth test and do not contribute their usual
+layered blend. This is a deliberate prototype trade-off, not physically correct
+transparency or CAD hidden-line classification. The renderer tests verify pass
+ordering, state restoration, depth-test settings, and unchanged selection
+overlay settings. These findings are qualitative and limited to one model and
+two views; more representative models, grazing angles, and transparency
+layering checks are needed before considering any architecture decision.
+
 ## Approaches
 
 ### A. Depth bias / polygon offset
