@@ -119,12 +119,11 @@ viewport.className = "viewport";
 
 const viewer = document.createElement("section");
 viewer.className = "viewer";
-viewer.append(status, selectionStatus, viewport);
+viewer.append(heading, status, selectionStatus, viewport);
 
 const controls = document.createElement("section");
 controls.className = "controls";
 controls.append(
-  heading,
   fileInput,
   sampleSelect,
   fitButton,
