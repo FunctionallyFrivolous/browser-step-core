@@ -880,7 +880,8 @@ export function createStepRenderer(
   };
 
   resize();
-  window.addEventListener("resize", resize);
+  const resizeObserver = new ResizeObserver(resize);
+  resizeObserver.observe(container);
   renderer.domElement.addEventListener("pointerdown", handlePointerDown);
   window.addEventListener("pointermove", handlePointerMove);
   window.addEventListener("pointerup", handlePointerEnd);
@@ -901,7 +902,7 @@ export function createStepRenderer(
     setShowSmoothEdges,
     dispose() {
       window.cancelAnimationFrame(animationFrame);
-      window.removeEventListener("resize", resize);
+      resizeObserver.disconnect();
       renderer.domElement.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerEnd);
