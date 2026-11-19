@@ -367,7 +367,7 @@ export function createGeometryGroup(
       boundary.userData.isEdgeLine = true;
       boundary.userData.faceIndex = mesh.faceIndex;
       boundary.userData.isSmoothEdge = isSmooth;
-      boundary.renderOrder = 1;
+      boundary.renderOrder = 0;
       updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
       group.add(boundary);
 
