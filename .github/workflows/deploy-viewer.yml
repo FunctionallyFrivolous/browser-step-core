@@ -13,7 +13,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -37,9 +37,19 @@ jobs:
       - run: npm run build
       - name: Assemble Pages site
         run: |
+          set -o pipefail
           mkdir -p pages/inspector
           cp -R apps/viewer/dist/. pages/
           cp -R apps/inspector/dist/. pages/inspector/
+          if git ls-remote --exit-code --heads origin pages-previews >/dev/null; then
+            git fetch origin refs/heads/pages-previews:refs/remotes/origin/pages-previews
+            git archive refs/remotes/origin/pages-previews previews | tar -x -C pages
+          else
+            status=$?
+            if [ "$status" -ne 2 ]; then
+              exit "$status"
+            fi
+          fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: pages

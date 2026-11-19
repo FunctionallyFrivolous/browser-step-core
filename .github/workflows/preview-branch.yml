@@ -1,0 +1,161 @@
+name: Temporary branch preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Deploy or remove a preview
+        type: choice
+        options:
+          - deploy
+          - remove
+        required: true
+      branch:
+        description: Branch to build (required when deploying)
+        type: string
+      name:
+        description: Preview name (lowercase letters, digits, and hyphens)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        env:
+          ACTION: ${{ inputs.action }}
+          BRANCH: ${{ inputs.branch }}
+          PREVIEW_NAME: ${{ inputs.name }}
+        run: |
+          if [[ ! "$PREVIEW_NAME" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+            echo "::error::Preview name must be 1-63 lowercase letters, digits, or hyphens, and start and end with a letter or digit."
+            exit 1
+          fi
+          if [[ "$ACTION" == "deploy" && -z "$BRANCH" ]]; then
+            echo "::error::A branch is required when deploying."
+            exit 1
+          fi
+
+  preview:
+    if: inputs.action == 'deploy'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/heads/${{ inputs.branch }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Build preview applications
+        env:
+          PREVIEW_NAME: ${{ inputs.name }}
+        run: |
+          npm run build --workspace @browser-step/viewer -- --base="/browser-step-core/previews/$PREVIEW_NAME/"
+          npm run build --workspace @browser-step/inspector -- --base="/browser-step-core/previews/$PREVIEW_NAME/inspector/"
+          mkdir -p preview/inspector
+          cp -R apps/viewer/dist/. preview/
+          cp -R apps/inspector/dist/. preview/inspector/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: branch-preview
+          path: preview
+          if-no-files-found: error
+
+  production:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - name: Assemble production site
+        run: |
+          mkdir -p pages/inspector
+          cp -R apps/viewer/dist/. pages/
+          cp -R apps/inspector/dist/. pages/inspector/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-site
+          path: pages
+          if-no-files-found: error
+
+  deploy:
+    if: always() && needs.validate.result == 'success' && needs.production.result == 'success' && (needs.preview.result == 'success' || (inputs.action == 'remove' && needs.preview.result == 'skipped'))
+    needs: [validate, preview, production]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: storage
+      - uses: actions/download-artifact@v4.3.0
+        with:
+          name: production-site
+          path: pages
+      - uses: actions/download-artifact@v4.3.0
+        if: inputs.action == 'deploy'
+        with:
+          name: branch-preview
+          path: ${{ runner.temp }}/branch-preview
+      - name: Update preview storage
+        working-directory: storage
+        env:
+          ACTION: ${{ inputs.action }}
+          PREVIEW_NAME: ${{ inputs.name }}
+          PREVIEW_DIR: ${{ runner.temp }}/branch-preview
+        run: |
+          if git ls-remote --exit-code --heads origin pages-previews >/dev/null; then
+            git fetch origin refs/heads/pages-previews
+            git switch -C pages-previews FETCH_HEAD
+          else
+            status=$?
+            if [ "$status" -ne 2 ]; then
+              exit "$status"
+            fi
+            git switch --orphan pages-previews
+            git rm -rf .
+          fi
+          mkdir -p previews
+          touch previews/.gitkeep
+          rm -rf -- "previews/$PREVIEW_NAME"
+          if [ "$ACTION" = deploy ]; then
+            mkdir -p "previews/$PREVIEW_NAME"
+            cp -R "$PREVIEW_DIR/." "previews/$PREVIEW_NAME/"
+          fi
+          git add -f -A previews
+          if ! git diff --cached --quiet; then
+            git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Update preview $PREVIEW_NAME"
+            git push origin HEAD:refs/heads/pages-previews
+          fi
+          cp -R previews ../pages/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+      - id: deployment
+        uses: actions/deploy-pages@v4
