@@ -359,15 +359,15 @@ export function createGeometryGroup(
         new LineMaterial({
           color: EDGE_COLOR,
           linewidth: clampedEdgeThickness,
-          transparent: false,
-          depthTest: true,
+          transparent: true,
+          depthTest: false,
           depthWrite: false,
         }),
       );
       boundary.userData.isEdgeLine = true;
       boundary.userData.faceIndex = mesh.faceIndex;
       boundary.userData.isSmoothEdge = isSmooth;
-      boundary.renderOrder = 0;
+      boundary.renderOrder = 1;
       updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
       group.add(boundary);
 
