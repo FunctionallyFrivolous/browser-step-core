@@ -53,7 +53,7 @@ projectionSelect.value = "orthographic";
 const lightingControl = document.createElement("label");
 const lightingToggle = document.createElement("input");
 lightingToggle.type = "checkbox";
-lightingControl.append(lightingToggle, "Use original scene lighting");
+lightingControl.append(lightingToggle, "Model Shading");
 
 const faceColorControl = document.createElement("label");
 const faceColorInput = document.createElement("input");
