@@ -621,6 +621,9 @@ test("object scope highlights every face and draws a camera-dependent silhouette
   assert.ok(faceMeshes.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
   assert.ok(highlights.every((highlight) => !highlight.visible));
   assert.equal(silhouette.visible, true);
+  assert.equal(silhouette.material.depthTest, false);
+  assert.equal(silhouette.material.depthWrite, false);
+  assert.equal(silhouette.renderOrder, 2);
   assert.ok(firstView.length > 0);
   assert.notDeepEqual(firstView, secondView);
 

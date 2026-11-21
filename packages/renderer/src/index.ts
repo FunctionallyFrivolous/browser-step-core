@@ -368,6 +368,43 @@ function getSilhouetteEdges(meshes: TriangleMesh[]): SilhouetteEdge[] {
   return [...edges.values()];
 }
 
+function isVisibleSilhouetteEdge(
+  group: THREE.Group,
+  camera: THREE.Camera,
+  edge: SilhouetteEdge,
+  faceMeshes: THREE.Mesh[],
+  raycaster: THREE.Raycaster,
+): boolean {
+  if (faceMeshes.length === 0) return true;
+
+  const midpoint = edge.start.clone().add(edge.end).multiplyScalar(0.5);
+  let origin: THREE.Vector3;
+  let direction: THREE.Vector3;
+  let midpointDistance: number;
+
+  if (camera instanceof THREE.PerspectiveCamera) {
+    origin = camera.position.clone();
+    direction = midpoint.clone().sub(origin).normalize();
+    midpointDistance = origin.distanceTo(midpoint);
+  } else {
+    direction = camera.getWorldDirection(new THREE.Vector3());
+    midpointDistance = 100000;
+    origin = midpoint.clone().add(direction.clone().multiplyScalar(-midpointDistance));
+  }
+
+  raycaster.set(origin, direction);
+  raycaster.near = 0;
+  raycaster.far = midpointDistance + 100000 * (camera instanceof THREE.PerspectiveCamera ? 0 : 1);
+  const hit = raycaster.intersectObjects(faceMeshes, false)[0];
+  if (!hit) return true;
+
+  if (camera instanceof THREE.PerspectiveCamera) {
+    return Math.abs(hit.distance - midpointDistance) <= 1e-4 * midpointDistance;
+  }
+  const distanceToMidpoint = origin.distanceTo(midpoint);
+  return Math.abs(hit.distance - distanceToMidpoint) <= 1e-4 * distanceToMidpoint;
+}
+
 export function updateGeometryGroupSilhouettes(
   group: THREE.Group,
   camera: THREE.Camera,
@@ -378,6 +415,17 @@ export function updateGeometryGroupSilhouettes(
     ...camera.quaternion.toArray(),
   ].join(",");
   const orthographicViewDirection = camera.getWorldDirection(new THREE.Vector3()).negate();
+  const faceMeshes: THREE.Mesh[] = [];
+  group.traverse((object) => {
+    if (
+      object instanceof THREE.Mesh &&
+      !object.userData.isEdgeLine &&
+      typeof object.userData.faceIndex === "number"
+    ) {
+      faceMeshes.push(object);
+    }
+  });
+  const raycaster = new THREE.Raycaster();
 
   group.traverse((object) => {
     if (!(object instanceof LineSegments2) || !object.userData.isObjectSilhouette) return;
@@ -392,8 +440,20 @@ export function updateGeometryGroupSilhouettes(
       const viewDirection = camera instanceof THREE.PerspectiveCamera
         ? camera.position.clone().sub(midpoint).normalize()
         : orthographicViewDirection;
-      const facing = edge.normals.map((normal) => normal.dot(viewDirection) > 0);
-      if (facing.length > 1 && facing.every((isFacing) => isFacing === facing[0])) {
+      const uniqueNormals = edge.normals.filter((normal, index, normals) =>
+        normals.findIndex((other) =>
+          other.dot(normal) > 0.999999 &&
+          other.dot(normal) > 0 &&
+          other.distanceTo(normal) < 1e-6
+        ) === index
+      );
+      const facing = uniqueNormals.map((normal) => normal.dot(viewDirection) > 0);
+      if (uniqueNormals.length > 1 && facing.every((isFacing) => isFacing === facing[0])) {
+        continue;
+      }
+      if (
+        !isVisibleSilhouetteEdge(group, camera, edge, faceMeshes, raycaster)
+      ) {
         continue;
       }
 
@@ -506,7 +566,7 @@ export function createGeometryGroup(
         color: SELECTED_EDGE_COLOR,
         linewidth: Math.min(Math.max(1, clampedEdgeThickness * 1.5), 3),
         transparent: true,
-        depthTest: true,
+        depthTest: false,
         depthWrite: false,
       }),
     );
