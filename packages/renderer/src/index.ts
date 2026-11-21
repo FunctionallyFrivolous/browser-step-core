@@ -3,6 +3,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { BodySilhouettePass } from "./body-silhouette.ts";
 import type { CameraProjection, StyleState, ViewState } from "@browser-step/core";
 
 export interface TriangleMesh {
@@ -15,12 +16,6 @@ export interface TriangleMesh {
 export type { CameraProjection } from "@browser-step/core";
 export type ShadingMode = "flat" | "original";
 export type SelectionScope = "face" | "object";
-
-interface SilhouetteEdge {
-  start: THREE.Vector3;
-  end: THREE.Vector3;
-  normals: THREE.Vector3[];
-}
 
 export interface PickedFace {
   faceIndex: number;
@@ -331,96 +326,6 @@ function createFaceBoundaryGeometries(
   return geometries;
 }
 
-function getSilhouetteEdges(meshes: TriangleMesh[]): SilhouetteEdge[] {
-  const edges = new Map<string, SilhouetteEdge>();
-  const pointKey = (point: THREE.Vector3) =>
-    [point.x, point.y, point.z]
-      .map((coordinate) => Math.round(coordinate * 100_000))
-      .join(",");
-
-  for (const mesh of meshes) {
-    for (let index = 0; index < mesh.indices.length; index += 3) {
-      const points = [0, 1, 2].map((offset) => {
-        const vertex = mesh.indices[index + offset] * 3;
-        return new THREE.Vector3(
-          mesh.positions[vertex],
-          mesh.positions[vertex + 1],
-          mesh.positions[vertex + 2],
-        );
-      });
-      const normal = points[1].clone().sub(points[0])
-        .cross(points[2].clone().sub(points[0])).normalize();
-      if (normal.lengthSq() === 0) continue;
-
-      for (const [first, second] of [[0, 1], [1, 2], [2, 0]]) {
-        const start = points[first];
-        const end = points[second];
-        const key = [pointKey(start), pointKey(end)].sort().join(":");
-        const edge = edges.get(key);
-        if (edge) {
-          edge.normals.push(normal);
-        } else {
-          edges.set(key, { start: start.clone(), end: end.clone(), normals: [normal] });
-        }
-      }
-    }
-  }
-
-  return [...edges.values()];
-}
-
-export function updateGeometryGroupSilhouettes(
-  group: THREE.Group,
-  camera: THREE.Camera,
-): void {
-  camera.updateMatrixWorld();
-  const cameraState = [
-    ...camera.position.toArray(),
-    ...camera.quaternion.toArray(),
-  ].join(",");
-  const orthographicViewDirection = camera.getWorldDirection(new THREE.Vector3()).negate();
-
-  group.traverse((object) => {
-    if (!(object instanceof LineSegments2) || !object.userData.isObjectSilhouette) return;
-    if (!object.userData.isSelected) return;
-    if (object.userData.silhouetteCameraState === cameraState) return;
-    object.userData.silhouetteCameraState = cameraState;
-
-    const edges = object.userData.silhouetteEdges as SilhouetteEdge[];
-    const positions: number[] = [];
-    for (const edge of edges) {
-      const midpoint = edge.start.clone().add(edge.end).multiplyScalar(0.5);
-      const viewDirection = camera instanceof THREE.PerspectiveCamera
-        ? camera.position.clone().sub(midpoint).normalize()
-        : orthographicViewDirection;
-      const hasFrontFacingTriangle = edge.normals.some(
-        (normal) => normal.dot(viewDirection) > 0,
-      );
-      const hasBackFacingTriangle = edge.normals.some(
-        (normal) => normal.dot(viewDirection) <= 0,
-      );
-      if (!hasFrontFacingTriangle || !hasBackFacingTriangle) {
-        continue;
-      }
-
-      positions.push(
-        edge.start.x,
-        edge.start.y,
-        edge.start.z,
-        edge.end.x,
-        edge.end.y,
-        edge.end.z,
-      );
-    }
-
-    const previousGeometry = object.geometry;
-    object.geometry = new LineSegmentsGeometry().setPositions(
-      positions.length > 0 ? positions : [0, 0, 0, 0, 0, 0],
-    );
-    previousGeometry.dispose();
-  });
-}
-
 function updateEdgeVisibility(
   object: THREE.Object3D,
   edgeThickness: number,
@@ -446,13 +351,9 @@ export function createGeometryGroup(
     0,
   );
   const smoothEdges = findSmoothBoundaryEdges(meshes);
-  const meshesByBody = new Map<number, TriangleMesh[]>();
 
   for (const mesh of meshes) {
     const bodyIndex = mesh.bodyIndex ?? mesh.faceIndex;
-    const bodyMeshes = meshesByBody.get(bodyIndex) ?? [];
-    bodyMeshes.push(mesh);
-    meshesByBody.set(bodyIndex, bodyMeshes);
 
     const material = createFaceMaterial(shadingMode, FACE_COLOR, opacity);
     const object = new THREE.Mesh(createFaceGeometry(mesh), material);
@@ -503,32 +404,6 @@ export function createGeometryGroup(
       updateEdgeVisibility(highlight, clampedEdgeThickness*1.5, showSmoothEdges);
       group.add(highlight);
     }
-  }
-
-  for (const [bodyIndex, bodyMeshes] of meshesByBody) {
-    const silhouette = new LineSegments2(
-      new LineSegmentsGeometry().setPositions([0, 0, 0, 0, 0, 0]),
-      new LineMaterial({
-        color: SELECTED_EDGE_COLOR,
-        linewidth: Math.min(Math.max(1, clampedEdgeThickness * 1.5), 3),
-        transparent: true,
-        depthTest: false,
-        depthWrite: false,
-      }),
-    );
-    silhouette.userData.isEdgeLine = true;
-    silhouette.userData.bodyIndex = bodyIndex;
-    silhouette.userData.isSelectionHighlight = true;
-    silhouette.userData.isObjectSilhouette = true;
-    silhouette.userData.isSelected = false;
-    silhouette.userData.silhouetteEdges = getSilhouetteEdges(bodyMeshes);
-    silhouette.renderOrder = 2;
-    updateEdgeVisibility(
-      silhouette,
-      clampedEdgeThickness * 1.5,
-      showSmoothEdges,
-    );
-    group.add(silhouette);
   }
 
   group.userData.edgeThickness = clampedEdgeThickness;
@@ -700,13 +575,13 @@ export function setGeometryGroupSelection(
       )
       .map(([bodyIndex]) => bodyIndex),
   );
+  group.userData.selectedBodies = scope === "object" ? selectedBodies : new Set<number>();
 
   group.traverse((object) => {
     if (object.userData.isEdgeLine) {
       if (object.userData.isSelectionHighlight) {
-        object.userData.isSelected = object.userData.isObjectSilhouette
-          ? scope === "object" && selectedBodies.has(object.userData.bodyIndex)
-          : scope === "face" && selectedFaceIndices.has(object.userData.faceIndex);
+        object.userData.isSelected =
+          scope === "face" && selectedFaceIndices.has(object.userData.faceIndex);
       }
       updateEdgeVisibility(
         object,
@@ -866,6 +741,7 @@ export function createStepRenderer(
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   container.append(renderer.domElement);
+  const silhouettePass = new BodySilhouettePass();
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x596575, 2));
   const light = new THREE.DirectionalLight(0xffffff, 2);
@@ -892,6 +768,8 @@ export function createStepRenderer(
     const width = Math.max(container.clientWidth, 1);
     const height = Math.max(container.clientHeight, 1);
     renderer.setSize(width, height);
+    const drawingBufferSize = renderer.getDrawingBufferSize(new THREE.Vector2());
+    silhouettePass.setSize(drawingBufferSize.x, drawingBufferSize.y);
     aspect = width / height;
     geometryGroup?.traverse((object) => {
       if (object instanceof THREE.Mesh && object.userData.isEdgeLine) {
@@ -918,8 +796,8 @@ export function createStepRenderer(
   const draw = () => {
     controls.update();
     onViewChange(getCameraViewState(camera, controls.target));
-    if (geometryGroup) updateGeometryGroupSilhouettes(geometryGroup, camera);
     renderSceneWithDepthPrepass(renderer, scene, camera, geometryGroup);
+    silhouettePass.render(renderer, camera, renderer.getPixelRatio());
     animationFrame = window.requestAnimationFrame(draw);
   };
 
@@ -1062,6 +940,7 @@ export function createStepRenderer(
       edgeThickness,
       showSmoothEdges,
     );
+    silhouettePass.setGroup(geometryGroup);
     setGeometryGroupStyle(geometryGroup, style);
     setGeometryGroupSelection(
       geometryGroup,
@@ -1112,6 +991,7 @@ export function createStepRenderer(
       renderer.domElement.removeEventListener("click", handleCanvasClick);
       window.removeEventListener("keydown", handleKeyDown);
       controls.dispose();
+      silhouettePass.dispose();
       if (geometryGroup) disposeGeometryGroup(geometryGroup);
       renderer.dispose();
       container.removeChild(renderer.domElement);
