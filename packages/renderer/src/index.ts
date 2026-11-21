@@ -388,7 +388,7 @@ export function createGeometryGroup(
       highlight.userData.isSelectionHighlight = true;
       highlight.userData.isSelected = false;
       highlight.renderOrder = 2;
-      updateEdgeVisibility(highlight, clampedEdgeThickness, showSmoothEdges);
+      updateEdgeVisibility(highlight, clampedEdgeThickness*1.5, showSmoothEdges);
       group.add(highlight);
     }
   }
