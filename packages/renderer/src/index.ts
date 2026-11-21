@@ -552,7 +552,7 @@ export function setGeometryGroupSelection(
       }
       updateEdgeVisibility(
         object,
-        group.userData.edgeThickness ?? 1,
+        Math.max(1,group.userData.edgeThickness ?? 1),
         group.userData.showSmoothEdges !== false,
       );
       return;
