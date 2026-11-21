@@ -522,7 +522,8 @@ export function setGeometryGroupEdgeThickness(
   group.traverse((object) => {
     if (!(object instanceof THREE.Mesh) || !object.userData.isEdgeLine) return;
     const material = object.material as LineMaterial;
-    material.linewidth = clampedThickness;
+    const isSelectedHighlight = object.userData.isSelectionHighlight === true;
+    material.linewidth = isSelectedHighlight ? clampedThickness : clampedThickness;
     updateEdgeVisibility(object, clampedThickness, showSmoothEdges);
   });
 }
