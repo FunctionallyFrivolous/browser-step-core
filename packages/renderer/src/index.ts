@@ -348,6 +348,7 @@ export function createGeometryGroup(
     const material = createFaceMaterial(shadingMode, FACE_COLOR, opacity);
     const object = new THREE.Mesh(createFaceGeometry(mesh), material);
     object.userData.faceIndex = mesh.faceIndex;
+    object.renderOrder = 1;
     group.add(object);
 
     for (const [isSmooth, geometry] of createFaceBoundaryGeometries(
@@ -361,13 +362,13 @@ export function createGeometryGroup(
           linewidth: clampedEdgeThickness,
           transparent: false,
           depthTest: true,
-          depthWrite: false,
+          depthWrite: true,
         }),
       );
       boundary.userData.isEdgeLine = true;
       boundary.userData.faceIndex = mesh.faceIndex;
       boundary.userData.isSmoothEdge = isSmooth;
-      boundary.renderOrder = 1;
+      boundary.renderOrder = 0;
       updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
       group.add(boundary);
 
@@ -377,8 +378,8 @@ export function createGeometryGroup(
           color: SELECTED_EDGE_COLOR,
           linewidth: clampedEdgeThickness,
           transparent: true,
-          depthTest: false,
-          depthWrite: false,
+          depthTest: true,
+          depthWrite: true,
         }),
       );
       highlight.userData.isEdgeLine = true;
@@ -409,6 +410,7 @@ function createFaceMaterial(
       side: THREE.DoubleSide,
       transparent: opacity < 1,
       opacity,
+      depthTest: true,
       depthWrite: opacity >= 1,
       polygonOffset: true,
       polygonOffsetFactor: 1,
@@ -422,6 +424,7 @@ function createFaceMaterial(
     side: THREE.DoubleSide,
     transparent: opacity < 1,
     opacity,
+    depthTest: true,
     depthWrite: opacity >= 1,
     polygonOffset: true,
     polygonOffsetFactor: 1,
