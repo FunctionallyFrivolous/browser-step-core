@@ -36,3 +36,15 @@ test("returns independent snapshots and allows listeners to unsubscribe", () => 
   assert.deepEqual(events, [[2]]);
   assert.deepEqual(selection.selectedFaces, [2, 3]);
 });
+
+test("toggles a group of faces as one selection change", () => {
+  const selection = new SelectionModel();
+  const events = [];
+  selection.subscribe((faces) => events.push(faces));
+
+  selection.toggleAll([2, 3, 4]);
+  selection.toggleAll([2, 3, 4]);
+
+  assert.deepEqual(selection.selectedFaces, []);
+  assert.deepEqual(events, [[2, 3, 4], []]);
+});

@@ -5,15 +5,17 @@
 `LibcascadeKernel.getTessellation()` walks the loaded shape's faces with
 `TopExp_Explorer` in `TopAbs_FACE` traversal order. It assigns a zero-based
 `faceIndex` to each explored face and includes that value with each emitted
-`TriangleMesh`. A face that has no usable triangulation can therefore leave a
-gap in the indices of the returned meshes. The kernel separately counts faces
-by traversing the shape; neither count nor index is a persistent identity.
+`TriangleMesh`. It also assigns a zero-based `bodyIndex` from the containing
+solid traversal. A face that has no usable triangulation can therefore leave a
+gap in the indices of the returned meshes. These indices are transient
+traversal identifiers, not persistent identities.
 
-The renderer copies `faceIndex` into each Three.js face mesh and its edge
-objects. Raycasting returns the hit mesh's index, and the shared selection
-model keeps those indices while the renderer displays their highlights. Both
+The renderer copies both indices into each Three.js face mesh and its edge
+objects. Raycasting returns the hit face and body indices. Face scope keeps the
+existing individual-face selection behavior; object scope selects all faces
+with the hit body's index and draws a camera-dependent silhouette. Both
 applications clear selection when replacing the geometry after a successful
-load. `ModelSession` increments a numeric revision
+load or changing selection scope. `ModelSession` increments a numeric revision
 after a successful STEP load, but that revision is not currently attached to
 face picks or selection.
 

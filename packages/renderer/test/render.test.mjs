@@ -8,6 +8,7 @@ import {
   fitOrthographicCameraToBounds,
   getCameraViewState,
   PointerGestureTracker,
+  raycastFace,
   raycastFaceIndex,
   renderSceneWithDepthPrepass,
   setGeometryGroupEdgeThickness,
@@ -17,6 +18,7 @@ import {
   setGeometryGroupSmoothEdgesVisible,
   setGeometryGroupSelection,
   switchCameraProjection,
+  updateGeometryGroupSilhouettes,
 } from "../src/index.ts";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { ViewStateModel } from "../../core/src/index.ts";
@@ -101,8 +103,13 @@ function getSelectionHighlights(group) {
   return group.children.filter(
     (child) =>
       child.userData.isEdgeLine &&
-      child.userData.isSelectionHighlight,
+      child.userData.isSelectionHighlight &&
+      !child.userData.isObjectSilhouette,
   );
+}
+
+function getObjectSilhouettes(group) {
+  return group.children.filter((child) => child.userData.isObjectSilhouette);
 }
 
 function getEdgeVertexCount(edge) {
@@ -563,6 +570,59 @@ test("highlights all faces in the supplied selection", () => {
     boundaries.every((boundary) => boundary.material.color.getHex() === 0x000000),
   );
   assert.ok(highlights.every((highlight) => highlight.visible));
+
+  disposeGroup(group);
+});
+
+test("object scope highlights every face and draws a camera-dependent silhouette", () => {
+  const vertices = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ];
+  const faces = [
+    [1, 2, 3],
+    [0, 3, 2],
+    [0, 1, 3],
+    [0, 2, 1],
+  ];
+  const meshes = faces.map((indices, faceIndex) => ({
+    faceIndex,
+    bodyIndex: 7,
+    positions: new Float32Array(vertices.flat()),
+    indices: new Uint32Array(indices),
+  }));
+  const group = createGeometryGroup(meshes);
+  setGeometryGroupSelection(group, new Set([0, 1, 2, 3]), "object");
+
+  const faceMeshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  const highlights = getSelectionHighlights(group);
+  const [silhouette] = getObjectSilhouettes(group);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(3, 3, 3);
+  camera.lookAt(0.25, 0.25, 0.25);
+  updateGeometryGroupSilhouettes(group, camera);
+  const firstView = [
+    ...silhouette.geometry.attributes.instanceStart.array,
+    ...silhouette.geometry.attributes.instanceEnd.array,
+  ];
+
+  camera.position.set(3, -3, 3);
+  camera.lookAt(0.25, 0.25, 0.25);
+  updateGeometryGroupSilhouettes(group, camera);
+  const secondView = [
+    ...silhouette.geometry.attributes.instanceStart.array,
+    ...silhouette.geometry.attributes.instanceEnd.array,
+  ];
+
+  assert.ok(faceMeshes.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
+  assert.ok(highlights.every((highlight) => !highlight.visible));
+  assert.equal(silhouette.visible, true);
+  assert.ok(firstView.length > 0);
+  assert.notDeepEqual(firstView, secondView);
 
   disposeGroup(group);
 });

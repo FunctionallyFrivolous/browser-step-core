@@ -10,6 +10,7 @@ export interface TriangleMesh {
   positions: Float32Array;
   indices: Uint32Array;
   faceIndex: number;
+  bodyIndex: number;
 }
 
 export class LibcascadeKernel implements CadKernel {
@@ -96,6 +97,47 @@ export class LibcascadeKernel implements CadKernel {
     const meshes: TriangleMesh[] = [];
 
     try {
+      const bodyIndices: number[] = [];
+      const solidExplorer = new oc.TopExp_Explorer(
+        this.shape,
+        oc.TopAbs_ShapeEnum.TopAbs_SOLID,
+      );
+
+      try {
+        let bodyIndex = 0;
+        while (solidExplorer.More()) {
+          const current = solidExplorer.Current();
+
+          try {
+            const solid = oc.TopoDS.Solid(current);
+            try {
+              const faceExplorer = new oc.TopExp_Explorer(
+                solid,
+                oc.TopAbs_ShapeEnum.TopAbs_FACE,
+              );
+
+              try {
+                while (faceExplorer.More()) {
+                  bodyIndices.push(bodyIndex);
+                  faceExplorer.Next();
+                }
+              } finally {
+                faceExplorer.delete();
+              }
+            } finally {
+              solid.delete();
+            }
+          } finally {
+            current.delete();
+          }
+
+          bodyIndex += 1;
+          solidExplorer.Next();
+        }
+      } finally {
+        solidExplorer.delete();
+      }
+
       const explorer = new oc.TopExp_Explorer(this.shape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
 
       try {
@@ -160,6 +202,7 @@ export class LibcascadeKernel implements CadKernel {
                       positions: new Float32Array(positions),
                       indices: new Uint32Array(indices),
                       faceIndex,
+                      bodyIndex: bodyIndices[faceIndex] ?? this.bodyCount,
                     });
                   }
                 }

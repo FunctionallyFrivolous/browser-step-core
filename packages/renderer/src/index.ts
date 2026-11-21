@@ -9,10 +9,23 @@ export interface TriangleMesh {
   positions: Float32Array;
   indices: Uint32Array;
   faceIndex: number;
+  bodyIndex?: number;
 }
 
 export type { CameraProjection } from "@browser-step/core";
 export type ShadingMode = "flat" | "original";
+export type SelectionScope = "face" | "object";
+
+interface SilhouetteEdge {
+  start: THREE.Vector3;
+  end: THREE.Vector3;
+  normals: THREE.Vector3[];
+}
+
+export interface PickedFace {
+  faceIndex: number;
+  bodyIndex: number;
+}
 
 export function getCameraViewState(
   camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
@@ -318,6 +331,90 @@ function createFaceBoundaryGeometries(
   return geometries;
 }
 
+function getSilhouetteEdges(meshes: TriangleMesh[]): SilhouetteEdge[] {
+  const edges = new Map<string, SilhouetteEdge>();
+  const pointKey = (point: THREE.Vector3) =>
+    [point.x, point.y, point.z]
+      .map((coordinate) => Math.round(coordinate * 100_000))
+      .join(",");
+
+  for (const mesh of meshes) {
+    for (let index = 0; index < mesh.indices.length; index += 3) {
+      const points = [0, 1, 2].map((offset) => {
+        const vertex = mesh.indices[index + offset] * 3;
+        return new THREE.Vector3(
+          mesh.positions[vertex],
+          mesh.positions[vertex + 1],
+          mesh.positions[vertex + 2],
+        );
+      });
+      const normal = points[1].clone().sub(points[0])
+        .cross(points[2].clone().sub(points[0])).normalize();
+
+      for (const [first, second] of [[0, 1], [1, 2], [2, 0]]) {
+        const start = points[first];
+        const end = points[second];
+        const key = [pointKey(start), pointKey(end)].sort().join(":");
+        const edge = edges.get(key);
+        if (edge) {
+          edge.normals.push(normal);
+        } else {
+          edges.set(key, { start: start.clone(), end: end.clone(), normals: [normal] });
+        }
+      }
+    }
+  }
+
+  return [...edges.values()];
+}
+
+export function updateGeometryGroupSilhouettes(
+  group: THREE.Group,
+  camera: THREE.Camera,
+): void {
+  camera.updateMatrixWorld();
+  const cameraState = [
+    ...camera.position.toArray(),
+    ...camera.quaternion.toArray(),
+  ].join(",");
+  const orthographicViewDirection = camera.getWorldDirection(new THREE.Vector3()).negate();
+
+  group.traverse((object) => {
+    if (!(object instanceof LineSegments2) || !object.userData.isObjectSilhouette) return;
+    if (!object.userData.isSelected) return;
+    if (object.userData.silhouetteCameraState === cameraState) return;
+    object.userData.silhouetteCameraState = cameraState;
+
+    const edges = object.userData.silhouetteEdges as SilhouetteEdge[];
+    const positions: number[] = [];
+    for (const edge of edges) {
+      const midpoint = edge.start.clone().add(edge.end).multiplyScalar(0.5);
+      const viewDirection = camera instanceof THREE.PerspectiveCamera
+        ? camera.position.clone().sub(midpoint).normalize()
+        : orthographicViewDirection;
+      const facing = edge.normals.map((normal) => normal.dot(viewDirection) > 0);
+      if (facing.length > 1 && facing.every((isFacing) => isFacing === facing[0])) {
+        continue;
+      }
+
+      positions.push(
+        edge.start.x,
+        edge.start.y,
+        edge.start.z,
+        edge.end.x,
+        edge.end.y,
+        edge.end.z,
+      );
+    }
+
+    const previousGeometry = object.geometry;
+    object.geometry = new LineSegmentsGeometry().setPositions(
+      positions.length > 0 ? positions : [0, 0, 0, 0, 0, 0],
+    );
+    previousGeometry.dispose();
+  });
+}
+
 function updateEdgeVisibility(
   object: THREE.Object3D,
   edgeThickness: number,
@@ -343,11 +440,18 @@ export function createGeometryGroup(
     0,
   );
   const smoothEdges = findSmoothBoundaryEdges(meshes);
+  const meshesByBody = new Map<number, TriangleMesh[]>();
 
   for (const mesh of meshes) {
+    const bodyIndex = mesh.bodyIndex ?? mesh.faceIndex;
+    const bodyMeshes = meshesByBody.get(bodyIndex) ?? [];
+    bodyMeshes.push(mesh);
+    meshesByBody.set(bodyIndex, bodyMeshes);
+
     const material = createFaceMaterial(shadingMode, FACE_COLOR, opacity);
     const object = new THREE.Mesh(createFaceGeometry(mesh), material);
     object.userData.faceIndex = mesh.faceIndex;
+    object.userData.bodyIndex = bodyIndex;
     object.renderOrder = 1;
     group.add(object);
 
@@ -367,6 +471,7 @@ export function createGeometryGroup(
       );
       boundary.userData.isEdgeLine = true;
       boundary.userData.faceIndex = mesh.faceIndex;
+      boundary.userData.bodyIndex = bodyIndex;
       boundary.userData.isSmoothEdge = isSmooth;
       boundary.renderOrder = 0;
       updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
@@ -384,6 +489,7 @@ export function createGeometryGroup(
       );
       highlight.userData.isEdgeLine = true;
       highlight.userData.faceIndex = mesh.faceIndex;
+      highlight.userData.bodyIndex = bodyIndex;
       highlight.userData.isSmoothEdge = isSmooth;
       highlight.userData.isSelectionHighlight = true;
       highlight.userData.isSelected = false;
@@ -391,6 +497,32 @@ export function createGeometryGroup(
       updateEdgeVisibility(highlight, clampedEdgeThickness*1.5, showSmoothEdges);
       group.add(highlight);
     }
+  }
+
+  for (const [bodyIndex, bodyMeshes] of meshesByBody) {
+    const silhouette = new LineSegments2(
+      new LineSegmentsGeometry().setPositions([0, 0, 0, 0, 0, 0]),
+      new LineMaterial({
+        color: SELECTED_EDGE_COLOR,
+        linewidth: Math.min(Math.max(1, clampedEdgeThickness * 1.5), 3),
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+      }),
+    );
+    silhouette.userData.isEdgeLine = true;
+    silhouette.userData.bodyIndex = bodyIndex;
+    silhouette.userData.isSelectionHighlight = true;
+    silhouette.userData.isObjectSilhouette = true;
+    silhouette.userData.isSelected = false;
+    silhouette.userData.silhouetteEdges = getSilhouetteEdges(bodyMeshes);
+    silhouette.renderOrder = 2;
+    updateEdgeVisibility(
+      silhouette,
+      clampedEdgeThickness * 1.5,
+      showSmoothEdges,
+    );
+    group.add(silhouette);
   }
 
   group.userData.edgeThickness = clampedEdgeThickness;
@@ -544,11 +676,31 @@ export function setGeometryGroupSmoothEdgesVisible(
 export function setGeometryGroupSelection(
   group: THREE.Group,
   selectedFaceIndices: ReadonlySet<number>,
+  scope: SelectionScope = "face",
 ): void {
+  const facesByBody = new Map<number, number[]>();
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || object.userData.isEdgeLine) return;
+    const bodyIndex = object.userData.bodyIndex as number;
+    const faceIndices = facesByBody.get(bodyIndex) ?? [];
+    faceIndices.push(object.userData.faceIndex as number);
+    facesByBody.set(bodyIndex, faceIndices);
+  });
+  const selectedBodies = new Set(
+    [...facesByBody]
+      .filter(([, faceIndices]) =>
+        faceIndices.length > 0 &&
+        faceIndices.every((faceIndex) => selectedFaceIndices.has(faceIndex)),
+      )
+      .map(([bodyIndex]) => bodyIndex),
+  );
+
   group.traverse((object) => {
     if (object.userData.isEdgeLine) {
       if (object.userData.isSelectionHighlight) {
-        object.userData.isSelected = selectedFaceIndices.has(object.userData.faceIndex);
+        object.userData.isSelected = object.userData.isObjectSilhouette
+          ? scope === "object" && selectedBodies.has(object.userData.bodyIndex)
+          : scope === "face" && selectedFaceIndices.has(object.userData.faceIndex);
       }
       updateEdgeVisibility(
         object,
@@ -573,10 +725,10 @@ export function setGeometryGroupSelection(
   });
 }
 
-export function raycastFaceIndex(
+export function raycastFace(
   raycaster: THREE.Raycaster,
   group: THREE.Group,
-): number | undefined {
+): PickedFace | undefined {
   if (!group.visible) return undefined;
 
   const faceMeshes: THREE.Mesh[] = [];
@@ -590,7 +742,19 @@ export function raycastFaceIndex(
     }
   });
 
-  return raycaster.intersectObjects(faceMeshes)[0]?.object.userData.faceIndex;
+  const hit = raycaster.intersectObjects(faceMeshes)[0]?.object;
+  if (!hit) return undefined;
+  return {
+    faceIndex: hit.userData.faceIndex,
+    bodyIndex: hit.userData.bodyIndex,
+  };
+}
+
+export function raycastFaceIndex(
+  raycaster: THREE.Raycaster,
+  group: THREE.Group,
+): number | undefined {
+  return raycastFace(raycaster, group)?.faceIndex;
 }
 
 function disposeGeometryGroup(group: THREE.Group): void {
@@ -669,11 +833,12 @@ export function renderSceneWithDepthPrepass(
 
 export function createStepRenderer(
   container: HTMLElement,
-  onPick: (faceIndex: number | undefined) => void = () => {},
+  onPick: (faceIndex: number | undefined, bodyIndex?: number) => void = () => {},
   onViewChange: (state: ViewState) => void = () => {},
 ): {
   renderMeshes(meshes: TriangleMesh[], style: StyleState): void;
   setSelectedFaces(faceIndices: readonly number[]): void;
+  setSelectionScope(scope: SelectionScope): void;
   setStyleState(style: StyleState): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
@@ -708,6 +873,8 @@ export function createStepRenderer(
   controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
   let shadingMode: ShadingMode = "flat";
+  let selectionScope: SelectionScope = "face";
+  let selectedFaceIndices: readonly number[] = [];
   let edgeThickness = 1;
   let showSmoothEdges = true;
   let animationFrame = 0;
@@ -745,6 +912,7 @@ export function createStepRenderer(
   const draw = () => {
     controls.update();
     onViewChange(getCameraViewState(camera, controls.target));
+    if (geometryGroup) updateGeometryGroupSilhouettes(geometryGroup, camera);
     renderSceneWithDepthPrepass(renderer, scene, camera, geometryGroup);
     animationFrame = window.requestAnimationFrame(draw);
   };
@@ -824,8 +992,24 @@ export function createStepRenderer(
   };
 
   const setSelectedFaces = (faceIndices: readonly number[]) => {
+    selectedFaceIndices = [...faceIndices];
     if (geometryGroup) {
-      setGeometryGroupSelection(geometryGroup, new Set(faceIndices));
+      setGeometryGroupSelection(
+        geometryGroup,
+        new Set(selectedFaceIndices),
+        selectionScope,
+      );
+    }
+  };
+
+  const setSelectionScope = (scope: SelectionScope) => {
+    selectionScope = scope;
+    if (geometryGroup) {
+      setGeometryGroupSelection(
+        geometryGroup,
+        new Set(selectedFaceIndices),
+        selectionScope,
+      );
     }
   };
 
@@ -839,7 +1023,8 @@ export function createStepRenderer(
     pointer.y = -((event.clientY - bounds.top) / bounds.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
 
-    onPick(raycastFaceIndex(raycaster, geometryGroup));
+    const picked = raycastFace(raycaster, geometryGroup);
+    onPick(picked?.faceIndex, picked?.bodyIndex);
   };
 
   const handlePointerDown = (event: PointerEvent) => {
@@ -872,6 +1057,11 @@ export function createStepRenderer(
       showSmoothEdges,
     );
     setGeometryGroupStyle(geometryGroup, style);
+    setGeometryGroupSelection(
+      geometryGroup,
+      new Set(selectedFaceIndices),
+      selectionScope,
+    );
     scene.add(geometryGroup);
     geometryGroup.traverse((object) => {
       if (object instanceof THREE.Mesh && object.userData.isEdgeLine) {
@@ -898,6 +1088,7 @@ export function createStepRenderer(
   return {
     renderMeshes,
     setSelectedFaces,
+    setSelectionScope,
     fitToView,
     setProjection,
     setViewState,
