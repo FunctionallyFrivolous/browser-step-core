@@ -630,6 +630,91 @@ test("object scope highlights every face and draws a camera-dependent silhouette
   disposeGroup(group);
 });
 
+test("keeps the selected body's outer contour independent of overlapping bodies", () => {
+  const vertices = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+  ];
+  const faces = [
+    [1, 2, 3],
+    [0, 3, 2],
+    [0, 1, 3],
+    [0, 2, 1],
+  ];
+  const selectedMeshes = faces.map((indices, faceIndex) => ({
+    faceIndex,
+    bodyIndex: 7,
+    positions: new Float32Array(vertices.flat()),
+    indices: new Uint32Array(indices),
+  }));
+  const overlappingBody = faces.map((indices, faceIndex) => ({
+    faceIndex: faceIndex + faces.length,
+    bodyIndex: 8,
+    positions: new Float32Array(vertices.flatMap(([x, y, z]) => [x + 0.1, y + 0.1, z + 0.1])),
+    indices: new Uint32Array(indices),
+  }));
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(3, 3, 3);
+  camera.lookAt(0.25, 0.25, 0.25);
+
+  const selectedOnly = createGeometryGroup(selectedMeshes);
+  setGeometryGroupSelection(selectedOnly, new Set([0, 1, 2, 3]), "object");
+  updateGeometryGroupSilhouettes(selectedOnly, camera);
+  const [selectedOnlyOutline] = getObjectSilhouettes(selectedOnly);
+  const selectedOnlyPositions = [
+    ...selectedOnlyOutline.geometry.attributes.instanceStart.array,
+    ...selectedOnlyOutline.geometry.attributes.instanceEnd.array,
+  ];
+
+  const withOverlappingBody = createGeometryGroup([
+    ...selectedMeshes,
+    ...overlappingBody,
+  ]);
+  setGeometryGroupSelection(withOverlappingBody, new Set([0, 1, 2, 3]), "object");
+  updateGeometryGroupSilhouettes(withOverlappingBody, camera);
+  const [selectedOutline] = getObjectSilhouettes(withOverlappingBody);
+  const selectedPositions = [
+    ...selectedOutline.geometry.attributes.instanceStart.array,
+    ...selectedOutline.geometry.attributes.instanceEnd.array,
+  ];
+
+  assert.deepEqual(selectedPositions, selectedOnlyPositions);
+  assert.ok(selectedOutline.geometry.attributes.instanceStart.count < 6);
+
+  disposeGroup(selectedOnly);
+  disposeGroup(withOverlappingBody);
+});
+
+test("omits coplanar triangulation diagonals from a body silhouette", () => {
+  const faces = [
+    [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
+    [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]],
+    [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
+    [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]],
+    [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]],
+    [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
+  ];
+  const meshes = faces.map((vertices, faceIndex) => ({
+    faceIndex,
+    bodyIndex: 7,
+    positions: new Float32Array(vertices.flat()),
+    indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
+  }));
+  const group = createGeometryGroup(meshes);
+  setGeometryGroupSelection(group, new Set([0, 1, 2, 3, 4, 5]), "object");
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  camera.position.set(3, 3, 3);
+  camera.lookAt(0.5, 0.5, 0.5);
+  updateGeometryGroupSilhouettes(group, camera);
+
+  const [silhouette] = getObjectSilhouettes(group);
+  assert.equal(silhouette.geometry.attributes.instanceStart.count, 6);
+
+  disposeGroup(group);
+});
+
 test("updates highlights when a face is removed from the supplied selection", () => {
   const group = createGeometryGroup([
     {
