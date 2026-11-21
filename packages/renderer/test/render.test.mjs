@@ -167,6 +167,7 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
+  assert.equal(mesh.material.depthTest, true);
   assert.equal(mesh.material.depthWrite, false);
   assert.equal(mesh.material.polygonOffset, true);
   assert.equal(mesh.material.polygonOffsetFactor, 1);
@@ -178,15 +179,15 @@ test("creates a Three.js mesh for each tessellated face", () => {
   assert.equal(boundary.material.transparent, true);
   assert.equal(boundary.material.linewidth, 1);
   assert.equal(boundary.material.depthTest, true);
-  assert.equal(boundary.material.depthWrite, false);
+  assert.equal(boundary.material.depthWrite, true);
   assert.equal(highlight.visible, false);
   assert.equal(highlight.material.color.getHex(), 0xff0000);
   assert.equal(highlight.material.linewidth, 1);
-  assert.equal(highlight.material.depthTest, false);
-  assert.equal(highlight.material.depthWrite, false);
-  assert.equal(boundary.renderOrder, 1);
-  assert.equal(mesh.renderOrder, 0);
-  assert.ok(highlight.renderOrder > boundary.renderOrder);
+  assert.equal(highlight.material.depthTest, true);
+  assert.equal(highlight.material.depthWrite, true);
+  assert.equal(boundary.renderOrder, 0);
+  assert.equal(mesh.renderOrder, 1);
+  assert.equal(highlight.renderOrder, 2);
 
   disposeGroup(group);
 });
@@ -236,6 +237,7 @@ test("switches between flat and original shading while preserving selection", ()
   assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
+  assert.equal(mesh.material.depthTest, true);
   assert.equal(mesh.material.depthWrite, false);
   assert.equal(mesh.material.metalness, 0.1);
   assert.equal(mesh.material.roughness, 0.65);
@@ -246,6 +248,7 @@ test("switches between flat and original shading while preserving selection", ()
   assert.equal(mesh.material.side, THREE.DoubleSide);
   assert.equal(mesh.material.transparent, true);
   assert.equal(mesh.material.opacity, 0.5);
+  assert.equal(mesh.material.depthTest, true);
   assert.equal(mesh.material.depthWrite, false);
 
   disposeGroup(group);
@@ -359,7 +362,9 @@ test("switches opaque faces to depth-writing while keeping boundaries occludable
   assert.equal(mesh.material.transparent, false);
   assert.equal(mesh.material.depthWrite, true);
   assert.equal(boundary.material.depthTest, true);
-  assert.equal(highlight.material.depthTest, false);
+  assert.equal(boundary.material.depthWrite, true);
+  assert.equal(highlight.material.depthTest, true);
+  assert.equal(highlight.material.depthWrite, true);
 
   setGeometryGroupOpacity(group, 0.5);
   assert.equal(mesh.material.transparent, true);
@@ -449,7 +454,8 @@ test("renders a depth-only face prepass before depth-tested edges", () => {
     },
   ]);
   assert.equal(boundary.material.depthTest, true);
-  assert.equal(highlight.material.depthTest, false);
+  assert.equal(highlight.material.depthTest, true);
+  assert.equal(highlight.material.depthWrite, true);
 
   disposeGroup(group);
 });
