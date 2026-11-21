@@ -14,6 +14,39 @@ export interface TriangleMesh {
 export type { CameraProjection } from "@browser-step/core";
 export type ShadingMode = "flat" | "original";
 
+export interface DepthRenderSettings {
+  faceDepthWrite: boolean | undefined;
+  faceDepthTest: boolean;
+  faceRenderOrder: number;
+  edgeDepthWrite: boolean;
+  edgeDepthTest: boolean;
+  edgeRenderOrder: number;
+}
+
+const DEFAULT_DEPTH_RENDER_SETTINGS: DepthRenderSettings = {
+  faceDepthWrite: undefined,
+  faceDepthTest: true,
+  faceRenderOrder: 0,
+  edgeDepthWrite: false,
+  edgeDepthTest: true,
+  edgeRenderOrder: 1,
+};
+
+function validateDepthRenderSettings(settings: DepthRenderSettings): void {
+  if (
+    (settings.faceDepthWrite !== undefined &&
+      typeof settings.faceDepthWrite !== "boolean") ||
+    typeof settings.faceDepthTest !== "boolean" ||
+    !Number.isInteger(settings.faceRenderOrder) ||
+    typeof settings.edgeDepthWrite !== "boolean" ||
+    typeof settings.edgeDepthTest !== "boolean" ||
+    !Number.isInteger(settings.edgeRenderOrder) ||
+    settings.faceRenderOrder === settings.edgeRenderOrder
+  ) {
+    throw new Error("Invalid depth render settings.");
+  }
+}
+
 export function getCameraViewState(
   camera: THREE.PerspectiveCamera | THREE.OrthographicCamera,
   target: THREE.Vector3,
@@ -395,6 +428,7 @@ export function createGeometryGroup(
   group.userData.edgeThickness = clampedEdgeThickness;
   group.userData.showSmoothEdges = showSmoothEdges;
   group.userData.faceColor = FACE_COLOR;
+  group.userData.depthRenderSettings = { ...DEFAULT_DEPTH_RENDER_SETTINGS };
   return group;
 }
 
@@ -462,6 +496,10 @@ export function setGeometryGroupShading(
     );
     previousMaterial.dispose();
   });
+  const depthSettings = group.userData.depthRenderSettings as
+    | DepthRenderSettings
+    | undefined;
+  if (depthSettings) setGeometryGroupDepthSettings(group, depthSettings);
 }
 
 export function setGeometryGroupOpacity(group: THREE.Group, opacity: number): void {
@@ -503,6 +541,46 @@ export function setGeometryGroupStyle(group: THREE.Group, style: StyleState): vo
         setFaceMaterialOpacity(material, style.opacity);
       }
     }
+  });
+  const depthSettings = group.userData.depthRenderSettings as
+    | DepthRenderSettings
+    | undefined;
+  if (depthSettings) setGeometryGroupDepthSettings(group, depthSettings);
+}
+
+export function setGeometryGroupDepthSettings(
+  group: THREE.Group,
+  settings: DepthRenderSettings,
+): void {
+  validateDepthRenderSettings(settings);
+  group.userData.depthRenderSettings = { ...settings };
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+
+    if (object.userData.isEdgeLine) {
+      if (object.userData.isSelectionHighlight) return;
+      const material = object.material as LineMaterial;
+      material.depthWrite = settings.edgeDepthWrite;
+      material.depthTest = settings.edgeDepthTest;
+      object.renderOrder = settings.edgeRenderOrder;
+      return;
+    }
+
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : [object.material];
+    for (const material of materials) {
+      if (
+        material instanceof THREE.MeshBasicMaterial ||
+        material instanceof THREE.MeshStandardMaterial
+      ) {
+        if (settings.faceDepthWrite !== undefined) {
+          material.depthWrite = settings.faceDepthWrite;
+        }
+        material.depthTest = settings.faceDepthTest;
+      }
+    }
+    object.renderOrder = settings.faceRenderOrder;
   });
 }
 
@@ -670,6 +748,7 @@ export function createStepRenderer(
   renderMeshes(meshes: TriangleMesh[], style: StyleState): void;
   setSelectedFaces(faceIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
+  setDepthRenderSettings(settings: DepthRenderSettings): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
   setViewState(state: ViewState): void;
@@ -705,6 +784,7 @@ export function createStepRenderer(
   let shadingMode: ShadingMode = "flat";
   let edgeThickness = 1;
   let showSmoothEdges = true;
+  let depthRenderSettings = { ...DEFAULT_DEPTH_RENDER_SETTINGS };
   let animationFrame = 0;
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
@@ -801,6 +881,14 @@ export function createStepRenderer(
     if (geometryGroup) setGeometryGroupStyle(geometryGroup, style);
   };
 
+  const setDepthRenderSettings = (settings: DepthRenderSettings) => {
+    validateDepthRenderSettings(settings);
+    depthRenderSettings = { ...settings };
+    if (geometryGroup) {
+      setGeometryGroupDepthSettings(geometryGroup, depthRenderSettings);
+    }
+  };
+
   const setEdgeThickness = (nextEdgeThickness: number) => {
     edgeThickness = Math.max(
       Number.isFinite(nextEdgeThickness) ? nextEdgeThickness : 0,
@@ -867,6 +955,7 @@ export function createStepRenderer(
       showSmoothEdges,
     );
     setGeometryGroupStyle(geometryGroup, style);
+    setGeometryGroupDepthSettings(geometryGroup, depthRenderSettings);
     scene.add(geometryGroup);
     geometryGroup.traverse((object) => {
       if (object instanceof THREE.Mesh && object.userData.isEdgeLine) {
@@ -898,6 +987,7 @@ export function createStepRenderer(
     setViewState,
     setShadingMode,
     setStyleState,
+    setDepthRenderSettings,
     setEdgeThickness,
     setShowSmoothEdges,
     dispose() {

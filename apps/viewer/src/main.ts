@@ -5,13 +5,38 @@ import {
   StyleStateModel,
   ViewStateModel,
 } from "@browser-step/core";
-import { createStepRenderer, type CameraProjection } from "@browser-step/renderer";
+import {
+  createStepRenderer,
+  type CameraProjection,
+  type DepthRenderSettings,
+} from "@browser-step/renderer";
 import { sampleModels } from "@browser-step/samples";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
 if (!app) {
   throw new Error("Viewer root element was not found.");
+}
+
+function createDepthToggle(label: string, ariaLabel: string, checked: boolean) {
+  const control = document.createElement("label");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = checked;
+  input.setAttribute("aria-label", ariaLabel);
+  control.append(input, label);
+  return { control, input };
+}
+
+function createRenderOrderControl(ariaLabel: string, value: number) {
+  const control = document.createElement("label");
+  const input = document.createElement("input");
+  input.type = "number";
+  input.step = "1";
+  input.value = String(value);
+  input.setAttribute("aria-label", ariaLabel);
+  control.append(ariaLabel, input);
+  return { control, input };
 }
 
 const heading = document.createElement("h1");
@@ -104,6 +129,21 @@ smoothEdgesToggle.type = "checkbox";
 smoothEdgesToggle.checked = true;
 smoothEdgesControl.append(smoothEdgesToggle, "Show smooth edges");
 
+let depthRenderSettings: DepthRenderSettings = {
+  faceDepthWrite: undefined,
+  faceDepthTest: true,
+  faceRenderOrder: 0,
+  edgeDepthWrite: false,
+  edgeDepthTest: true,
+  edgeRenderOrder: 1,
+};
+const faceDepthWrite = createDepthToggle("Face depth write", "Face depth write", false);
+const faceDepthTest = createDepthToggle("Face depth test", "Face depth test", true);
+const faceRenderOrder = createRenderOrderControl("Face render order", 0);
+const edgeDepthWrite = createDepthToggle("Edge depth write", "Edge depth write", false);
+const edgeDepthTest = createDepthToggle("Edge depth test", "Edge depth test", true);
+const edgeRenderOrder = createRenderOrderControl("Edge render order", 1);
+
 const status = document.createElement("p");
 status.className = "status";
 status.setAttribute("aria-live", "polite");
@@ -134,6 +174,12 @@ controls.append(
   opacityControl,
   edgeThicknessControl,
   smoothEdgesControl,
+  faceDepthWrite.control,
+  faceDepthTest.control,
+  faceRenderOrder.control,
+  edgeDepthWrite.control,
+  edgeDepthTest.control,
+  edgeRenderOrder.control,
 );
 
 app.append(viewer, controls);
@@ -155,6 +201,7 @@ const renderer = createStepRenderer(viewport, (faceIndex) => {
     updatingViewFromRenderer = false;
   }
 });
+renderer.setDepthRenderSettings(depthRenderSettings);
 view.subscribe((state) => {
   projectionSelect.value = state.projection;
   if (!updatingViewFromRenderer) renderer.setViewState(state);
@@ -167,6 +214,9 @@ style.subscribe((state) => {
   opacityValue.textContent = opacityValue.value;
   visibilityToggle.checked = state.visible;
   renderer.setStyleState(state);
+  if (depthRenderSettings.faceDepthWrite === undefined) {
+    faceDepthWrite.input.checked = state.opacity >= 1;
+  }
 });
 const initialStyle = style.state;
 faceColorInput.value = `#${initialStyle.faceColor.toString(16).padStart(6, "0")}`;
@@ -209,6 +259,58 @@ edgeThicknessSlider.addEventListener("input", () => {
 });
 smoothEdgesToggle.addEventListener("change", () => {
   renderer.setShowSmoothEdges(smoothEdgesToggle.checked);
+});
+faceDepthWrite.input.addEventListener("change", () => {
+  depthRenderSettings = {
+    ...depthRenderSettings,
+    faceDepthWrite: faceDepthWrite.input.checked,
+  };
+  renderer.setDepthRenderSettings(depthRenderSettings);
+});
+faceDepthTest.input.addEventListener("change", () => {
+  depthRenderSettings = {
+    ...depthRenderSettings,
+    faceDepthTest: faceDepthTest.input.checked,
+  };
+  renderer.setDepthRenderSettings(depthRenderSettings);
+});
+edgeDepthWrite.input.addEventListener("change", () => {
+  depthRenderSettings = {
+    ...depthRenderSettings,
+    edgeDepthWrite: edgeDepthWrite.input.checked,
+  };
+  renderer.setDepthRenderSettings(depthRenderSettings);
+});
+edgeDepthTest.input.addEventListener("change", () => {
+  depthRenderSettings = {
+    ...depthRenderSettings,
+    edgeDepthTest: edgeDepthTest.input.checked,
+  };
+  renderer.setDepthRenderSettings(depthRenderSettings);
+});
+function updateRenderOrder(input: HTMLInputElement, face: boolean): void {
+  const nextOrder = input.valueAsNumber;
+  const otherOrder = face
+    ? depthRenderSettings.edgeRenderOrder
+    : depthRenderSettings.faceRenderOrder;
+  if (!input.validity.valid || !Number.isInteger(nextOrder) || nextOrder === otherOrder) {
+    input.value = String(
+      face
+        ? depthRenderSettings.faceRenderOrder
+        : depthRenderSettings.edgeRenderOrder,
+    );
+    return;
+  }
+  depthRenderSettings = face
+    ? { ...depthRenderSettings, faceRenderOrder: nextOrder }
+    : { ...depthRenderSettings, edgeRenderOrder: nextOrder };
+  renderer.setDepthRenderSettings(depthRenderSettings);
+}
+faceRenderOrder.input.addEventListener("change", () => {
+  updateRenderOrder(faceRenderOrder.input, true);
+});
+edgeRenderOrder.input.addEventListener("change", () => {
+  updateRenderOrder(edgeRenderOrder.input, false);
 });
 
 fileInput.addEventListener("change", async () => {

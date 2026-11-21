@@ -10,6 +10,7 @@ import {
   PointerGestureTracker,
   raycastFaceIndex,
   renderSceneWithDepthPrepass,
+  setGeometryGroupDepthSettings,
   setGeometryGroupEdgeThickness,
   setGeometryGroupOpacity,
   setGeometryGroupShading,
@@ -310,6 +311,63 @@ test("applies shared face color, opacity, and visibility while preserving select
   assert.equal(faces[1].material.color.getHex(), 0x123456);
   assert.equal(faces[1].material.opacity, 0.25);
   assert.ok(boundaries.every((boundary) => boundary.material.opacity === 1));
+
+  disposeGroup(group);
+});
+
+test("applies face and edge depth settings across style and shading changes", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const face = group.children.find(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  const boundary = getBoundaryLines(group)[0];
+  const highlight = getSelectionHighlights(group)[0];
+  const settings = {
+    faceDepthWrite: true,
+    faceDepthTest: false,
+    faceRenderOrder: 4,
+    edgeDepthWrite: true,
+    edgeDepthTest: false,
+    edgeRenderOrder: 5,
+  };
+
+  setGeometryGroupDepthSettings(group, settings);
+  assert.equal(face.material.depthWrite, true);
+  assert.equal(face.material.depthTest, false);
+  assert.equal(face.renderOrder, 4);
+  assert.equal(boundary.material.depthWrite, true);
+  assert.equal(boundary.material.depthTest, false);
+  assert.equal(boundary.renderOrder, 5);
+  assert.equal(highlight.material.depthTest, false);
+  assert.equal(highlight.renderOrder, 2);
+
+  setGeometryGroupStyle(group, {
+    faceColor: 0x123456,
+    opacity: 0.25,
+    visible: true,
+  });
+  assert.equal(face.material.depthWrite, true);
+  assert.equal(face.material.depthTest, false);
+  assert.equal(face.renderOrder, 4);
+
+  setGeometryGroupShading(group, "original");
+  assert.equal(face.material.depthWrite, true);
+  assert.equal(face.material.depthTest, false);
+  assert.equal(face.renderOrder, 4);
+  assert.throws(
+    () => setGeometryGroupDepthSettings(group, { ...settings, edgeRenderOrder: 4 }),
+    /Invalid depth render settings/,
+  );
+  assert.throws(
+    () => setGeometryGroupDepthSettings(group, { ...settings, faceRenderOrder: 4.5 }),
+    /Invalid depth render settings/,
+  );
 
   disposeGroup(group);
 });
