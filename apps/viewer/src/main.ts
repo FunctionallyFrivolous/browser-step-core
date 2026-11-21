@@ -61,12 +61,6 @@ faceColorInput.type = "color";
 faceColorInput.setAttribute("aria-label", "Face color");
 faceColorControl.append("Face color", faceColorInput);
 
-const visibilityControl = document.createElement("label");
-const visibilityToggle = document.createElement("input");
-visibilityToggle.type = "checkbox";
-visibilityToggle.checked = true;
-visibilityControl.append(visibilityToggle, "Show model");
-
 const opacityControl = document.createElement("label");
 const opacitySlider = document.createElement("input");
 opacitySlider.type = "range";
@@ -130,7 +124,6 @@ controls.append(
   projectionSelect,
   lightingControl,
   faceColorControl,
-  visibilityControl,
   opacityControl,
   edgeThicknessControl,
   smoothEdgesControl,
@@ -165,7 +158,6 @@ style.subscribe((state) => {
   opacitySlider.value = String(state.opacity);
   opacityValue.value = `${Math.round(state.opacity * 100)}%`;
   opacityValue.textContent = opacityValue.value;
-  visibilityToggle.checked = state.visible;
   renderer.setStyleState(state);
 });
 const initialStyle = style.state;
@@ -194,9 +186,6 @@ faceColorInput.addEventListener("input", () => {
     ...style.state,
     faceColor: Number.parseInt(faceColorInput.value.slice(1), 16),
   });
-});
-visibilityToggle.addEventListener("change", () => {
-  style.setState({ ...style.state, visible: visibilityToggle.checked });
 });
 opacitySlider.addEventListener("input", () => {
   style.setState({ ...style.state, opacity: Number(opacitySlider.value) });
