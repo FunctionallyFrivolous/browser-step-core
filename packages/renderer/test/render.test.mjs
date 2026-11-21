@@ -18,8 +18,8 @@ import {
   setGeometryGroupSmoothEdgesVisible,
   setGeometryGroupSelection,
   switchCameraProjection,
-  updateGeometryGroupSilhouettes,
 } from "../src/index.ts";
+import { BodySilhouettePass } from "../src/body-silhouette.ts";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { ViewStateModel } from "../../core/src/index.ts";
 
@@ -106,10 +106,6 @@ function getSelectionHighlights(group) {
       child.userData.isSelectionHighlight &&
       !child.userData.isObjectSilhouette,
   );
-}
-
-function getObjectSilhouettes(group) {
-  return group.children.filter((child) => child.userData.isObjectSilhouette);
 }
 
 function getEdgeVertexCount(edge) {
@@ -574,7 +570,7 @@ test("highlights all faces in the supplied selection", () => {
   disposeGroup(group);
 });
 
-test("object scope highlights every face and draws a camera-dependent silhouette", () => {
+test("object scope selects complete bodies for the silhouette pass", () => {
   const vertices = [
     [0, 0, 0],
     [1, 0, 0],
@@ -600,37 +596,18 @@ test("object scope highlights every face and draws a camera-dependent silhouette
     (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
   );
   const highlights = getSelectionHighlights(group);
-  const [silhouette] = getObjectSilhouettes(group);
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(3, 3, 3);
-  camera.lookAt(0.25, 0.25, 0.25);
-  updateGeometryGroupSilhouettes(group, camera);
-  const firstView = [
-    ...silhouette.geometry.attributes.instanceStart.array,
-    ...silhouette.geometry.attributes.instanceEnd.array,
-  ];
-
-  camera.position.set(3, -3, 3);
-  camera.lookAt(0.25, 0.25, 0.25);
-  updateGeometryGroupSilhouettes(group, camera);
-  const secondView = [
-    ...silhouette.geometry.attributes.instanceStart.array,
-    ...silhouette.geometry.attributes.instanceEnd.array,
-  ];
-
   assert.ok(faceMeshes.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
   assert.ok(highlights.every((highlight) => !highlight.visible));
-  assert.equal(silhouette.visible, true);
-  assert.equal(silhouette.material.depthTest, false);
-  assert.equal(silhouette.material.depthWrite, false);
-  assert.equal(silhouette.renderOrder, 2);
-  assert.ok(firstView.length > 0);
-  assert.notDeepEqual(firstView, secondView);
+  assert.deepEqual([...group.userData.selectedBodies], [7]);
+  setGeometryGroupSelection(group, new Set([0, 1, 2]), "object");
+  assert.equal(group.userData.selectedBodies.size, 0);
+  setGeometryGroupSelection(group, new Set([0, 1, 2, 3]), "face");
+  assert.equal(group.userData.selectedBodies.size, 0);
 
   disposeGroup(group);
 });
 
-test("keeps the selected body's outer contour independent of overlapping bodies", () => {
+test("renders a separate projected mask for each selected body on every camera change", () => {
   const vertices = [
     [0, 0, 0],
     [1, 0, 0],
@@ -659,59 +636,68 @@ test("keeps the selected body's outer contour independent of overlapping bodies"
   camera.position.set(3, 3, 3);
   camera.lookAt(0.25, 0.25, 0.25);
 
-  const selectedOnly = createGeometryGroup(selectedMeshes);
-  setGeometryGroupSelection(selectedOnly, new Set([0, 1, 2, 3]), "object");
-  updateGeometryGroupSilhouettes(selectedOnly, camera);
-  const [selectedOnlyOutline] = getObjectSilhouettes(selectedOnly);
-  const selectedOnlyPositions = [
-    ...selectedOnlyOutline.geometry.attributes.instanceStart.array,
-    ...selectedOnlyOutline.geometry.attributes.instanceEnd.array,
-  ];
-
-  const withOverlappingBody = createGeometryGroup([
+  const group = createGeometryGroup([
     ...selectedMeshes,
     ...overlappingBody,
   ]);
-  setGeometryGroupSelection(withOverlappingBody, new Set([0, 1, 2, 3]), "object");
-  updateGeometryGroupSilhouettes(withOverlappingBody, camera);
-  const [selectedOutline] = getObjectSilhouettes(withOverlappingBody);
-  const selectedPositions = [
-    ...selectedOutline.geometry.attributes.instanceStart.array,
-    ...selectedOutline.geometry.attributes.instanceEnd.array,
-  ];
+  const pass = new BodySilhouettePass();
+  pass.setSize(300, 200);
+  pass.setGroup(group);
+  let target = null;
+  const color = new THREE.Color(0x123456);
+  let alpha = 0.5;
+  const renders = [];
+  const renderer = {
+    getRenderTarget: () => target,
+    setRenderTarget: (value) => { target = value; },
+    getClearColor: (value) => value.copy(color),
+    getClearAlpha: () => alpha,
+    setClearColor: (value, a) => { color.set(value); alpha = a; },
+    clear: () => {},
+    render: (scene, view) => {
+      renders.push({
+        target,
+        view,
+        geometries: scene.children.map((child) => child.geometry),
+        transforms: scene.children.map((child) => child.matrix.clone()),
+      });
+    },
+  };
+  const faceMeshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  group.position.set(2, 0, 0);
+  setGeometryGroupSelection(group, new Set([0, 1, 2, 3]), "object");
+  pass.render(renderer, camera, 1);
+  camera.position.set(3, -3, 3);
+  camera.lookAt(0.25, 0.25, 0.25);
+  pass.render(renderer, camera, 1);
+  assert.equal(renders.length, 4);
+  assert.equal(renders[0].view, camera);
+  assert.equal(renders[2].view, camera);
+  assert.deepEqual(renders[0].geometries, faceMeshes.slice(0, 4).map((mesh) => mesh.geometry));
+  assert.equal(renders[0].transforms[0].elements[12], 2);
+  assert.deepEqual(renders[2].geometries, renders[0].geometries);
+  assert.ok(renders[0].target);
+  assert.equal(renders[1].target, null);
+  assert.equal(color.getHex(), 0x123456);
+  assert.equal(alpha, 0.5);
 
-  assert.deepEqual(selectedPositions, selectedOnlyPositions);
-  assert.ok(selectedOutline.geometry.attributes.instanceStart.count < 6);
-
-  disposeGroup(selectedOnly);
-  disposeGroup(withOverlappingBody);
-});
-
-test("omits coplanar triangulation diagonals from a body silhouette", () => {
-  const faces = [
-    [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
-    [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]],
-    [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
-    [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]],
-    [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]],
-    [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
-  ];
-  const meshes = faces.map((vertices, faceIndex) => ({
-    faceIndex,
-    bodyIndex: 7,
-    positions: new Float32Array(vertices.flat()),
-    indices: new Uint32Array([0, 1, 2, 0, 2, 3]),
-  }));
-  const group = createGeometryGroup(meshes);
-  setGeometryGroupSelection(group, new Set([0, 1, 2, 3, 4, 5]), "object");
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-  camera.position.set(3, 3, 3);
-  camera.lookAt(0.5, 0.5, 0.5);
-  updateGeometryGroupSilhouettes(group, camera);
-
-  const [silhouette] = getObjectSilhouettes(group);
-  assert.equal(silhouette.geometry.attributes.instanceStart.count, 6);
-
+  renders.length = 0;
+  setGeometryGroupSelection(group, new Set([0, 1, 2, 3, 4, 5, 6, 7]), "object");
+  pass.render(renderer, camera, 1);
+  assert.equal(renders.length, 4);
+  assert.deepEqual(renders[2].geometries, faceMeshes.slice(4).map((mesh) => mesh.geometry));
+  group.visible = false;
+  pass.render(renderer, camera, 1);
+  assert.equal(renders.length, 4);
+  group.visible = true;
+  renderer.render = () => { throw new Error("render failed"); };
+  assert.throws(() => pass.render(renderer, camera, 1), /render failed/);
+  assert.equal(target, null);
+  assert.equal(color.getHex(), 0x123456);
+  assert.equal(alpha, 0.5);
+  pass.dispose();
   disposeGroup(group);
 });
 

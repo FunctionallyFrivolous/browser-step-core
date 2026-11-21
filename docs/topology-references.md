@@ -13,7 +13,10 @@ traversal identifiers, not persistent identities.
 The renderer copies both indices into each Three.js face mesh and its edge
 objects. Raycasting returns the hit face and body indices. Face scope keeps the
 existing individual-face selection behavior; object scope selects all faces
-with the hit body's index and draws a camera-dependent silhouette. Both
+with the hit body's index and outlines the screen-space projection of its
+tessellated faces. The outline includes projected holes and disconnected
+islands, but not internal face or feature edges; it updates with the camera.
+Both
 applications clear selection when replacing the geometry after a successful
 load or changing selection scope. `ModelSession` increments a numeric revision
 after a successful STEP load, but that revision is not currently attached to
