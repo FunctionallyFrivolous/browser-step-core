@@ -378,8 +378,8 @@ export function createGeometryGroup(
           color: SELECTED_EDGE_COLOR,
           linewidth: clampedEdgeThickness,
           transparent: true,
-          depthTest: true,
-          depthWrite: true,
+          depthTest: false,
+          depthWrite: false,
         }),
       );
       highlight.userData.isEdgeLine = true;
