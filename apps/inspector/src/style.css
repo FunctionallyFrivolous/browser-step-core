@@ -16,7 +16,7 @@ body {
 
 #app {
   display: grid;
-  grid-template-rows: repeat(5, auto) minmax(0, 1fr);
+  grid-template-rows: repeat(7, auto) minmax(0, 1fr);
   gap: 12px;
   width: 100%;
   height: 100vh;
@@ -34,6 +34,11 @@ p {
 
 button {
   justify-self: start;
+}
+
+fieldset {
+  display: flex;
+  gap: 12px;
 }
 
 .viewport {

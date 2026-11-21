@@ -187,6 +187,17 @@ export class SelectionModel {
     }
   }
 
+  toggleAll(faceIndices: readonly number[]): void {
+    if (faceIndices.length === 0) return;
+
+    const shouldDeselect = faceIndices.every((faceIndex) => this.faces.has(faceIndex));
+    for (const faceIndex of faceIndices) {
+      if (shouldDeselect) this.faces.delete(faceIndex);
+      else this.faces.add(faceIndex);
+    }
+    this.notify();
+  }
+
   clear(): void {
     if (this.faces.size === 0) return;
     this.faces.clear();

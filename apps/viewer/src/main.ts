@@ -5,7 +5,11 @@ import {
   StyleStateModel,
   ViewStateModel,
 } from "@browser-step/core";
-import { createStepRenderer, type CameraProjection } from "@browser-step/renderer";
+import {
+  createStepRenderer,
+  type CameraProjection,
+  type SelectionScope,
+} from "@browser-step/renderer";
 import { sampleModels } from "@browser-step/samples";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -108,6 +112,22 @@ selectionStatus.className = "status";
 selectionStatus.setAttribute("aria-live", "polite");
 selectionStatus.textContent = "0 faces selected";
 
+const selectionScopeControl = document.createElement("fieldset");
+const selectionScopeLegend = document.createElement("legend");
+selectionScopeLegend.textContent = "Selection Scope";
+selectionScopeControl.append(selectionScopeLegend);
+for (const scope of ["object", "face"] as const) {
+  const label = document.createElement("label");
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.name = "selection-scope";
+  input.value = scope;
+  input.checked = scope === "face";
+  input.setAttribute("aria-label", scope === "object" ? "Object" : "Face");
+  label.append(input, scope === "object" ? "Object" : "Face");
+  selectionScopeControl.append(label);
+}
+
 const viewport = document.createElement("div");
 viewport.className = "viewport";
 
@@ -127,6 +147,7 @@ controls.append(
   opacityControl,
   edgeThicknessControl,
   smoothEdgesControl,
+  selectionScopeControl,
 );
 
 app.append(viewer, controls);
@@ -136,10 +157,17 @@ const commandManager = new CommandManager();
 const selection = new SelectionModel();
 const style = new StyleStateModel();
 const view = new ViewStateModel();
+let selectionScope: SelectionScope = "face";
+let bodyFaces = new Map<number, number[]>();
 let updatingViewFromRenderer = false;
-const renderer = createStepRenderer(viewport, (faceIndex) => {
-  if (faceIndex === undefined) selection.clear();
-  else selection.toggle(faceIndex);
+const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex) => {
+  if (faceIndex === undefined) {
+    selection.clear();
+  } else if (selectionScope === "object") {
+    selection.toggleAll(bodyFaces.get(bodyIndex ?? faceIndex) ?? [faceIndex]);
+  } else {
+    selection.toggle(faceIndex);
+  }
 }, (state) => {
   updatingViewFromRenderer = true;
   try {
@@ -170,6 +198,14 @@ selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
   const count = selectedFaceIndices.length;
   selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
+});
+
+selectionScopeControl.addEventListener("change", (event) => {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || !input.checked) return;
+  selectionScope = input.value === "object" ? "object" : "face";
+  selection.clear();
+  renderer.setSelectionScope(selectionScope);
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
@@ -223,6 +259,13 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     await session.load(await readData());
     const meshes = session.tessellation;
     selection.clear();
+    bodyFaces = new Map();
+    for (const mesh of meshes) {
+      const bodyIndex = mesh.bodyIndex ?? mesh.faceIndex;
+      const faces = bodyFaces.get(bodyIndex) ?? [];
+      faces.push(mesh.faceIndex);
+      bodyFaces.set(bodyIndex, faces);
+    }
     renderer.renderMeshes(meshes, style.state);
     fitButton.disabled = false;
     status.textContent =
