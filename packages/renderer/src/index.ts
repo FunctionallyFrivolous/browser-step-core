@@ -333,6 +333,7 @@ function updateEdgeVisibility(
 ): void {
   const isSelectedHighlight = object.userData.isSelectionHighlight === true;
   object.visible =
+    object.userData.isBodyHidden !== true &&
     edgeThickness > 0 &&
     (!object.userData.isSmoothEdge || showSmoothEdges) &&
     (!isSelectedHighlight || object.userData.isSelected === true);
@@ -554,6 +555,26 @@ export function setGeometryGroupSmoothEdgesVisible(
   });
 }
 
+export function setGeometryGroupHiddenBodies(
+  group: THREE.Group,
+  bodyIndices: ReadonlySet<number>,
+): void {
+  const hiddenBodies = new Set(bodyIndices);
+  group.userData.hiddenBodies = hiddenBodies;
+  const edgeThickness = group.userData.edgeThickness ?? 1;
+  const showSmoothEdges = group.userData.showSmoothEdges !== false;
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh)) return;
+    const isHidden = hiddenBodies.has(object.userData.bodyIndex as number);
+    object.userData.isBodyHidden = isHidden;
+    if (object.userData.isEdgeLine) {
+      updateEdgeVisibility(object, edgeThickness, showSmoothEdges);
+    } else {
+      object.visible = !isHidden;
+    }
+  });
+}
+
 export function setGeometryGroupSelection(
   group: THREE.Group,
   selectedFaceIndices: ReadonlySet<number>,
@@ -617,6 +638,8 @@ export function raycastFace(
     if (
       object instanceof THREE.Mesh &&
       !object.userData.isEdgeLine &&
+      object.visible &&
+      object.userData.isBodyHidden !== true &&
       typeof object.userData.faceIndex === "number"
     ) {
       faceMeshes.push(object);
@@ -720,6 +743,7 @@ export function createStepRenderer(
   renderMeshes(meshes: TriangleMesh[], style: StyleState): void;
   setSelectedFaces(faceIndices: readonly number[]): void;
   setSelectionScope(scope: SelectionScope): void;
+  setHiddenBodies(bodyIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
@@ -804,7 +828,16 @@ export function createStepRenderer(
   const fitToView = () => {
     if (!geometryGroup) return;
 
-    const bounds = new THREE.Box3().setFromObject(geometryGroup);
+    const bounds = new THREE.Box3();
+    geometryGroup.traverse((object) => {
+      if (
+        object instanceof THREE.Mesh &&
+        !object.userData.isEdgeLine &&
+        object.visible
+      ) {
+        bounds.expandByObject(object);
+      }
+    });
     if (camera instanceof THREE.PerspectiveCamera) {
       fitCameraToBounds(camera, bounds, controls.target);
     } else if (camera instanceof THREE.OrthographicCamera) {
@@ -897,6 +930,12 @@ export function createStepRenderer(
     }
   };
 
+  const setHiddenBodies = (bodyIndices: readonly number[]) => {
+    if (geometryGroup) {
+      setGeometryGroupHiddenBodies(geometryGroup, new Set(bodyIndices));
+    }
+  };
+
   const handleCanvasClick = (event: MouseEvent) => {
     if (pointerGestures.consumeDrag()) return;
     if (!geometryGroup) return;
@@ -974,6 +1013,7 @@ export function createStepRenderer(
     renderMeshes,
     setSelectedFaces,
     setSelectionScope,
+    setHiddenBodies,
     fitToView,
     setProjection,
     setViewState,

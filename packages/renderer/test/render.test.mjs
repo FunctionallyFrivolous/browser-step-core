@@ -12,6 +12,7 @@ import {
   raycastFaceIndex,
   renderSceneWithDepthPrepass,
   setGeometryGroupEdgeThickness,
+  setGeometryGroupHiddenBodies,
   setGeometryGroupOpacity,
   setGeometryGroupShading,
   setGeometryGroupStyle,
@@ -218,6 +219,56 @@ test("ignores nearby boundary lines when picking faces", () => {
   assert.equal(raycastFaceIndex(raycaster, group), 4);
   group.visible = false;
   assert.equal(raycastFaceIndex(raycaster, group), undefined);
+
+  disposeGroup(group);
+});
+
+test("hides bodies without affecting other bodies or edge visibility settings", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      bodyIndex: 1,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+    {
+      faceIndex: 5,
+      bodyIndex: 2,
+      positions: new Float32Array([2, 0, 0, 3, 0, 0, 2, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const hiddenFace = group.children.find((child) => child.userData.faceIndex === 4);
+  const visibleFace = group.children.find((child) => child.userData.faceIndex === 5);
+  const hiddenEdges = group.children.filter(
+    (child) => child.userData.bodyIndex === 1 && child.userData.isEdgeLine,
+  );
+  const visibleEdges = group.children.filter(
+    (child) => child.userData.bodyIndex === 2 && child.userData.isEdgeLine,
+  );
+  const raycaster = new THREE.Raycaster(
+    new THREE.Vector3(0.2, 0.2, 2),
+    new THREE.Vector3(0, 0, -1),
+  );
+
+  setGeometryGroupHiddenBodies(group, new Set([1]));
+  assert.equal(hiddenFace.visible, false);
+  assert.equal(visibleFace.visible, true);
+  assert.ok(hiddenEdges.every((edge) => !edge.visible));
+  assert.ok(visibleEdges.some((edge) => edge.visible));
+  assert.equal(raycastFace(raycaster, group), undefined);
+  raycaster.set(
+    new THREE.Vector3(2.2, 0.2, 2),
+    new THREE.Vector3(0, 0, -1),
+  );
+  assert.equal(raycastFace(raycaster, group).faceIndex, 5);
+
+  setGeometryGroupEdgeThickness(group, 0);
+  setGeometryGroupHiddenBodies(group, new Set());
+  assert.equal(hiddenFace.visible, true);
+  assert.ok(hiddenEdges.every((edge) => !edge.visible));
+  setGeometryGroupEdgeThickness(group, 1);
+  assert.ok(hiddenEdges.some((edge) => edge.visible));
 
   disposeGroup(group);
 });
@@ -684,6 +735,11 @@ test("renders a separate projected mask for each selected body on every camera c
   assert.equal(alpha, 0.5);
 
   renders.length = 0;
+  setGeometryGroupHiddenBodies(group, new Set([7]));
+  pass.render(renderer, camera, 1);
+  assert.equal(renders.length, 0);
+  setGeometryGroupHiddenBodies(group, new Set());
+
   setGeometryGroupSelection(group, new Set([0, 1, 2, 3, 4, 5, 6, 7]), "object");
   pass.render(renderer, camera, 1);
   assert.equal(renders.length, 4);

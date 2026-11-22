@@ -44,6 +44,11 @@ fitButton.type = "button";
 fitButton.textContent = "Fit model to view";
 fitButton.disabled = true;
 
+const hideBodiesButton = document.createElement("button");
+hideBodiesButton.type = "button";
+hideBodiesButton.textContent = "Hide Bodies";
+hideBodiesButton.disabled = true;
+
 const projectionSelect = document.createElement("select");
 projectionSelect.setAttribute("aria-label", "Camera projection");
 for (const projection of ["orthographic", "perspective"] as const) {
@@ -141,6 +146,7 @@ controls.append(
   fileInput,
   sampleSelect,
   fitButton,
+  hideBodiesButton,
   projectionSelect,
   lightingControl,
   faceColorControl,
@@ -159,6 +165,7 @@ const style = new StyleStateModel();
 const view = new ViewStateModel();
 let selectionScope: SelectionScope = "face";
 let bodyFaces = new Map<number, number[]>();
+let hiddenBodies = new Set<number>();
 let updatingViewFromRenderer = false;
 const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex) => {
   if (faceIndex === undefined) {
@@ -198,6 +205,37 @@ selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
   const count = selectedFaceIndices.length;
   selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
+  updateBodyVisibilityControl();
+});
+
+function getSelectedBodyIndices(): number[] {
+  const selectedFaces = new Set(selection.selectedFaces);
+  return [...bodyFaces]
+    .filter(([, faceIndices]) =>
+      faceIndices.length > 0 &&
+      faceIndices.every((faceIndex) => selectedFaces.has(faceIndex)),
+    )
+    .map(([bodyIndex]) => bodyIndex);
+}
+
+function updateBodyVisibilityControl(): void {
+  const selectedBodies = getSelectedBodyIndices();
+  const showAllBodies = selectedBodies.length === 0 && hiddenBodies.size > 0;
+  hideBodiesButton.textContent = showAllBodies ? "Show All Bodies" : "Hide Bodies";
+  hideBodiesButton.disabled = selectedBodies.length === 0 && !showAllBodies;
+}
+
+hideBodiesButton.addEventListener("click", () => {
+  const selectedBodies = getSelectedBodyIndices();
+  if (selectedBodies.length > 0) {
+    for (const bodyIndex of selectedBodies) hiddenBodies.add(bodyIndex);
+    renderer.setHiddenBodies([...hiddenBodies]);
+    selection.clear();
+  } else if (hiddenBodies.size > 0) {
+    hiddenBodies.clear();
+    renderer.setHiddenBodies([]);
+  }
+  updateBodyVisibilityControl();
 });
 
 selectionScopeControl.addEventListener("change", (event) => {
@@ -266,6 +304,8 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
       faces.push(mesh.faceIndex);
       bodyFaces.set(bodyIndex, faces);
     }
+    hiddenBodies = new Set();
+    updateBodyVisibilityControl();
     renderer.renderMeshes(meshes, style.state);
     fitButton.disabled = false;
     status.textContent =
