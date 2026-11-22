@@ -1,1 +1,0 @@
-var e=`/browser-step-core/previews/hidebodies/assets/opencascade_single-CyyDj5yL.wasm`;export{e as default};
