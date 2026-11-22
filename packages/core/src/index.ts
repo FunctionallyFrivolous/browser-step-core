@@ -50,7 +50,7 @@ export class StyleStateModel {
 
   constructor(initial: StyleState = {
     faceColor: 0x9caec2,
-    opacity: 0.5,
+    opacity: 1,
     visible: true,
   }) {
     validateStyleState(initial);
