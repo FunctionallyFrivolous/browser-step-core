@@ -481,10 +481,18 @@ export function setGeometryGroupShading(
   });
 }
 
-export function setGeometryGroupOpacity(group: THREE.Group, opacity: number): void {
+export function setGeometryGroupOpacity(
+  group: THREE.Group,
+  opacity: number,
+  selectedFaceIndices: ReadonlySet<number> = new Set(),
+): void {
   const clampedOpacity = THREE.MathUtils.clamp(opacity, 0, 1);
   group.traverse((object) => {
-    if (!(object instanceof THREE.Mesh)) return;
+    if (!(object instanceof THREE.Mesh) || object.userData.isEdgeLine) return;
+    if (selectedFaceIndices.size > 0 && !selectedFaceIndices.has(object.userData.faceIndex)) return;
+
+    if (selectedFaceIndices.size > 0) object.userData.faceOpacity = clampedOpacity;
+    else delete object.userData.faceOpacity;
 
     const materials = Array.isArray(object.material)
       ? object.material
@@ -519,7 +527,7 @@ export function setGeometryGroupStyle(group: THREE.Group, style: StyleState): vo
             ? SELECTED_FACE_COLOR
             : object.userData.faceColor ?? style.faceColor,
         );
-        setFaceMaterialOpacity(material, style.opacity);
+        setFaceMaterialOpacity(material, object.userData.faceOpacity ?? style.opacity);
       }
     }
   });
@@ -766,6 +774,7 @@ export function createStepRenderer(
   setHiddenBodies(bodyIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
   setFaceColor(color: number, faceIndices: readonly number[]): void;
+  setFaceOpacity(opacity: number, faceIndices: readonly number[]): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
   setViewState(state: ViewState): void;
@@ -916,6 +925,10 @@ export function createStepRenderer(
     if (geometryGroup) setGeometryGroupFaceColor(geometryGroup, color, new Set(faceIndices));
   };
 
+  const setFaceOpacity = (opacity: number, faceIndices: readonly number[]) => {
+    if (geometryGroup) setGeometryGroupOpacity(geometryGroup, opacity, new Set(faceIndices));
+  };
+
   const setEdgeThickness = (nextEdgeThickness: number) => {
     edgeThickness = Math.max(
       Number.isFinite(nextEdgeThickness) ? nextEdgeThickness : 0,
@@ -1045,6 +1058,7 @@ export function createStepRenderer(
     setShadingMode,
     setStyleState,
     setFaceColor,
+    setFaceOpacity,
     setEdgeThickness,
     setShowSmoothEdges,
     dispose() {

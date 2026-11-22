@@ -337,6 +337,48 @@ test("sets opacity on all face meshes without changing boundary overlays", () =>
   disposeGroup(group);
 });
 
+test("applies opacity to selected faces or bodies and preserves overrides across style changes", () => {
+  const group = createGeometryGroup(
+    [4, 5, 6, 7].map((faceIndex) => ({
+      faceIndex,
+      bodyIndex: faceIndex < 6 ? 1 : 2,
+      positions: new Float32Array([0, 0, faceIndex, 1, 0, faceIndex, 0, 1, faceIndex]),
+      indices: new Uint32Array([0, 1, 2]),
+    })),
+  );
+  const faces = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  const opacities = () => faces.map((face) => face.material.opacity);
+  const selection = new SelectionModel();
+
+  selection.toggleAll([4, 5]);
+  setGeometryGroupOpacity(group, 1, new Set(selection.selectedFaces));
+  assert.deepEqual(opacities(), [1, 1, 0.5, 0.5]);
+  assert.equal(faces[0].material.transparent, false);
+  assert.equal(faces[0].material.depthWrite, true);
+
+  selection.clear();
+  selection.toggle(6);
+  setGeometryGroupOpacity(group, 0, new Set(selection.selectedFaces));
+  assert.deepEqual(opacities(), [1, 1, 0, 0.5]);
+  assert.equal(faces[2].material.transparent, true);
+  assert.equal(faces[2].material.depthWrite, false);
+
+  setGeometryGroupStyle(group, { faceColor: 0x123456, opacity: 0.5, visible: true });
+  setGeometryGroupShading(group, "original");
+  assert.deepEqual(opacities(), [1, 1, 0, 0.5]);
+  assert.ok(getBoundaryLines(group).every((line) => line.material.opacity === 1));
+  assert.ok(getSelectionHighlights(group).every((line) => line.material.opacity === 1));
+
+  selection.clear();
+  setGeometryGroupOpacity(group, 0.5, new Set(selection.selectedFaces));
+  setGeometryGroupStyle(group, { faceColor: 0xabcdef, opacity: 0.5, visible: true });
+  assert.deepEqual(opacities(), [0.5, 0.5, 0.5, 0.5]);
+
+  disposeGroup(group);
+});
+
 test("applies shared face color, opacity, and visibility while preserving selection", () => {
   const group = createGeometryGroup([
     {
