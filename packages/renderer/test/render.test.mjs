@@ -389,7 +389,16 @@ test("colors selected faces or bodies and colors every face when selection is em
   selection.select(4);
   selection.select(6);
   setGeometryGroupFaceColor(group, 0x123456, new Set(selection.selectedFaces));
-  assert.deepEqual(colors(), [0xffc7c7, 0x9caec2, 0xffc7c7, 0x9caec2]);
+  assert.deepEqual(colors(), [0x123456, 0x9caec2, 0x123456, 0x9caec2]);
+  assert.ok(
+    getSelectionHighlights(group)
+      .filter((highlight) => [4, 6].includes(highlight.userData.faceIndex))
+      .every((highlight) => highlight.visible),
+  );
+  setGeometryGroupStyle(group, { faceColor: 0x9caec2, opacity: 0.25, visible: true });
+  assert.deepEqual(colors(), [0x123456, 0x9caec2, 0x123456, 0x9caec2]);
+  selection.toggle(4);
+  assert.deepEqual(colors(), [0x123456, 0x9caec2, 0xffc7c7, 0x9caec2]);
   selection.clear();
   assert.deepEqual(colors(), [0x123456, 0x9caec2, 0x123456, 0x9caec2]);
 

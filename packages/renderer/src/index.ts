@@ -515,7 +515,7 @@ export function setGeometryGroupStyle(group: THREE.Group, style: StyleState): vo
         material instanceof THREE.MeshStandardMaterial
       ) {
         material.color.set(
-          object.userData.isSelected
+          object.userData.isSelected && !object.userData.isSelectionColorApplied
             ? SELECTED_FACE_COLOR
             : object.userData.faceColor ?? style.faceColor,
         );
@@ -535,7 +535,8 @@ export function setGeometryGroupFaceColor(
     if (selectedFaceIndices.size > 0 && !selectedFaceIndices.has(object.userData.faceIndex)) return;
 
     object.userData.faceColor = color;
-    if (!object.userData.isSelected && !Array.isArray(object.material) && "color" in object.material) {
+    object.userData.isSelectionColorApplied = object.userData.isSelected === true;
+    if (!Array.isArray(object.material) && "color" in object.material) {
       (object.material as THREE.MeshBasicMaterial | THREE.MeshStandardMaterial).color.set(color);
     }
   });
@@ -637,6 +638,7 @@ export function setGeometryGroupSelection(
       | THREE.MeshBasicMaterial
       | THREE.MeshStandardMaterial;
     object.userData.isSelected = selectedFaceIndices.has(object.userData.faceIndex);
+    object.userData.isSelectionColorApplied = false;
     material.color.set(
       object.userData.isSelected
         ? SELECTED_FACE_COLOR
