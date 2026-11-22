@@ -1,0 +1,1 @@
+var e=`/browser-step-core/previews/opacity/assets/opencascade_single-CyyDj5yL.wasm`;export{e as default};
