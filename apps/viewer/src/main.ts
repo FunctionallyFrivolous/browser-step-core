@@ -76,10 +76,10 @@ opacitySlider.type = "range";
 opacitySlider.min = "0";
 opacitySlider.max = "1";
 opacitySlider.step = "0.01";
-opacitySlider.value = "0.5";
+opacitySlider.value = "1";
 opacitySlider.setAttribute("aria-label", "Model opacity");
 const opacityValue = document.createElement("output");
-opacityValue.value = "50%";
+opacityValue.value = "100%";
 opacityValue.textContent = opacityValue.value;
 opacityControl.append("Model opacity", opacitySlider, opacityValue);
 
@@ -127,9 +127,9 @@ for (const scope of ["object", "face"] as const) {
   input.type = "radio";
   input.name = "selection-scope";
   input.value = scope;
-  input.checked = scope === "face";
-  input.setAttribute("aria-label", scope === "object" ? "Object" : "Face");
-  label.append(input, scope === "object" ? "Object" : "Face");
+  input.checked = scope === "object";
+  input.setAttribute("aria-label", scope === "object" ? "Body" : "Face");
+  label.append(input, scope === "object" ? "Body" : "Face");
   selectionScopeControl.append(label);
 }
 
@@ -145,15 +145,15 @@ controls.className = "controls";
 controls.append(
   fileInput,
   sampleSelect,
-  fitButton,
+  selectionScopeControl,
   hideBodiesButton,
-  projectionSelect,
-  lightingControl,
   faceColorControl,
   opacityControl,
   edgeThicknessControl,
+  projectionSelect,
+  lightingControl,
+  fitButton,
   smoothEdgesControl,
-  selectionScopeControl,
 );
 
 app.append(viewer, controls);
