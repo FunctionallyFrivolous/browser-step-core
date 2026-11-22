@@ -12,6 +12,7 @@ import {
   raycastFaceIndex,
   renderSceneWithDepthPrepass,
   setGeometryGroupEdgeThickness,
+  setGeometryGroupFaceColor,
   setGeometryGroupHiddenBodies,
   setGeometryGroupOpacity,
   setGeometryGroupShading,
@@ -22,7 +23,7 @@ import {
 } from "../src/index.ts";
 import { BodySilhouettePass } from "../src/body-silhouette.ts";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
-import { ViewStateModel } from "../../core/src/index.ts";
+import { SelectionModel, ViewStateModel } from "../../core/src/index.ts";
 
 test("restores shared camera views including orthographic zoom and clipping", () => {
   const camera = new THREE.OrthographicCamera(-4, 4, 2, -2, 0.1, 200);
@@ -368,6 +369,48 @@ test("applies shared face color, opacity, and visibility while preserving select
   assert.equal(faces[1].material.opacity, 0.25);
   assert.ok(boundaries.every((boundary) => boundary.material.opacity === 1));
 
+  disposeGroup(group);
+});
+
+test("colors selected faces or bodies and colors every face when selection is empty", () => {
+  const group = createGeometryGroup([4, 5, 6, 7].map((faceIndex) => ({
+    faceIndex,
+    bodyIndex: faceIndex < 6 ? 0 : 1,
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    indices: new Uint32Array([0, 1, 2]),
+  })));
+  const faces = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  const selection = new SelectionModel();
+  selection.subscribe((indices) => setGeometryGroupSelection(group, new Set(indices)));
+  const colors = () => faces.map((face) => face.material.color.getHex());
+
+  selection.select(4);
+  selection.select(6);
+  setGeometryGroupFaceColor(group, 0x123456, new Set(selection.selectedFaces));
+  assert.deepEqual(colors(), [0xffc7c7, 0x9caec2, 0xffc7c7, 0x9caec2]);
+  selection.clear();
+  assert.deepEqual(colors(), [0x123456, 0x9caec2, 0x123456, 0x9caec2]);
+
+  selection.toggleAll([4, 5]);
+  selection.toggleAll([6, 7]);
+  setGeometryGroupFaceColor(group, 0xabcdef, new Set(selection.selectedFaces));
+  selection.clear();
+  assert.deepEqual(colors(), [0xabcdef, 0xabcdef, 0xabcdef, 0xabcdef]);
+
+  selection.toggleAll([4, 5]);
+  setGeometryGroupFaceColor(group, 0x654321, new Set(selection.selectedFaces));
+  setGeometryGroupStyle(group, { faceColor: 0x9caec2, opacity: 0.25, visible: true });
+  setGeometryGroupShading(group, "original");
+  selection.clear();
+  assert.deepEqual(colors(), [0x654321, 0x654321, 0xabcdef, 0xabcdef]);
+  assert.ok(faces.every((face) => face.material.opacity === 0.25));
+
+  setGeometryGroupHiddenBodies(group, new Set([1]));
+  setGeometryGroupFaceColor(group, 0x9caec2, new Set());
+  setGeometryGroupHiddenBodies(group, new Set());
+  assert.deepEqual(colors(), [0x9caec2, 0x9caec2, 0x9caec2, 0x9caec2]);
   disposeGroup(group);
 });
 
