@@ -189,7 +189,6 @@ view.subscribe((state) => {
 });
 renderer.setViewState(view.state);
 style.subscribe((state) => {
-  faceColorInput.value = `#${state.faceColor.toString(16).padStart(6, "0")}`;
   opacitySlider.value = String(state.opacity);
   opacityValue.value = `${Math.round(state.opacity * 100)}%`;
   opacityValue.textContent = opacityValue.value;
@@ -256,10 +255,12 @@ lightingToggle.addEventListener("change", () => {
   renderer.setShadingMode(lightingToggle.checked ? "original" : "flat");
 });
 faceColorInput.addEventListener("input", () => {
-  style.setState({
-    ...style.state,
-    faceColor: Number.parseInt(faceColorInput.value.slice(1), 16),
-  });
+  const color = Number.parseInt(faceColorInput.value.slice(1), 16);
+  const selectedFaces = selection.selectedFaces;
+  renderer.setFaceColor(color, selectedFaces);
+  if (selectedFaces.length === 0) {
+    style.setState({ ...style.state, faceColor: color });
+  }
 });
 opacitySlider.addEventListener("input", () => {
   style.setState({ ...style.state, opacity: Number(opacitySlider.value) });

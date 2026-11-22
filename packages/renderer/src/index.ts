@@ -515,10 +515,28 @@ export function setGeometryGroupStyle(group: THREE.Group, style: StyleState): vo
         material instanceof THREE.MeshStandardMaterial
       ) {
         material.color.set(
-          object.userData.isSelected ? SELECTED_FACE_COLOR : style.faceColor,
+          object.userData.isSelected
+            ? SELECTED_FACE_COLOR
+            : object.userData.faceColor ?? style.faceColor,
         );
         setFaceMaterialOpacity(material, style.opacity);
       }
+    }
+  });
+}
+
+export function setGeometryGroupFaceColor(
+  group: THREE.Group,
+  color: number,
+  selectedFaceIndices: ReadonlySet<number>,
+): void {
+  group.traverse((object) => {
+    if (!(object instanceof THREE.Mesh) || object.userData.isEdgeLine) return;
+    if (selectedFaceIndices.size > 0 && !selectedFaceIndices.has(object.userData.faceIndex)) return;
+
+    object.userData.faceColor = color;
+    if (!object.userData.isSelected && !Array.isArray(object.material) && "color" in object.material) {
+      (object.material as THREE.MeshBasicMaterial | THREE.MeshStandardMaterial).color.set(color);
     }
   });
 }
@@ -622,7 +640,7 @@ export function setGeometryGroupSelection(
     material.color.set(
       object.userData.isSelected
         ? SELECTED_FACE_COLOR
-        : group.userData.faceColor ?? FACE_COLOR,
+        : object.userData.faceColor ?? group.userData.faceColor ?? FACE_COLOR,
     );
   });
 }
@@ -745,6 +763,7 @@ export function createStepRenderer(
   setSelectionScope(scope: SelectionScope): void;
   setHiddenBodies(bodyIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
+  setFaceColor(color: number, faceIndices: readonly number[]): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
   setViewState(state: ViewState): void;
@@ -891,6 +910,10 @@ export function createStepRenderer(
     if (geometryGroup) setGeometryGroupStyle(geometryGroup, style);
   };
 
+  const setFaceColor = (color: number, faceIndices: readonly number[]) => {
+    if (geometryGroup) setGeometryGroupFaceColor(geometryGroup, color, new Set(faceIndices));
+  };
+
   const setEdgeThickness = (nextEdgeThickness: number) => {
     edgeThickness = Math.max(
       Number.isFinite(nextEdgeThickness) ? nextEdgeThickness : 0,
@@ -1019,6 +1042,7 @@ export function createStepRenderer(
     setViewState,
     setShadingMode,
     setStyleState,
+    setFaceColor,
     setEdgeThickness,
     setShowSmoothEdges,
     dispose() {
