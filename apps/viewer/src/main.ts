@@ -189,9 +189,6 @@ view.subscribe((state) => {
 });
 renderer.setViewState(view.state);
 style.subscribe((state) => {
-  opacitySlider.value = String(state.opacity);
-  opacityValue.value = `${Math.round(state.opacity * 100)}%`;
-  opacityValue.textContent = opacityValue.value;
   renderer.setStyleState(state);
 });
 const initialStyle = style.state;
@@ -263,7 +260,14 @@ faceColorInput.addEventListener("input", () => {
   }
 });
 opacitySlider.addEventListener("input", () => {
-  style.setState({ ...style.state, opacity: Number(opacitySlider.value) });
+  const opacity = Number(opacitySlider.value);
+  const selectedFaces = selection.selectedFaces;
+  renderer.setFaceOpacity(opacity, selectedFaces);
+  opacityValue.value = `${Math.round(opacity * 100)}%`;
+  opacityValue.textContent = opacityValue.value;
+  if (selectedFaces.length === 0) {
+    style.setState({ ...style.state, opacity });
+  }
 });
 edgeThicknessSlider.addEventListener("input", () => {
   const thickness = Number(edgeThicknessSlider.value);
