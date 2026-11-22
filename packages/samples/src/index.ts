@@ -12,3 +12,7 @@ export const sampleModels = [
     url: new URL("./models/tester.step", import.meta.url).href,
   },
 ] as const;
+
+export const defaultSample = sampleModels.find(
+  ({ name }) => name === "multibodyTest.step",
+);

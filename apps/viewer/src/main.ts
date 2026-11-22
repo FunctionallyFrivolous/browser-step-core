@@ -10,7 +10,7 @@ import {
   type CameraProjection,
   type SelectionScope,
 } from "@browser-step/renderer";
-import { sampleModels } from "@browser-step/samples";
+import { defaultSample, sampleModels } from "@browser-step/samples";
 
 const app = document.querySelector<HTMLDivElement>("#app");
 
@@ -336,7 +336,6 @@ async function loadSampleModel(name: string): Promise<void> {
   });
 }
 
-const defaultSample = sampleModels[0];
 if (defaultSample) {
   sampleSelect.value = defaultSample.name;
   void loadSampleModel(defaultSample.name);
