@@ -95,9 +95,11 @@ export class BodySilhouettePass {
         const body = this.bodies.get(bodyIndex);
         if (!body) continue;
         for (const { source, mask } of body) {
+          if (!source.visible) continue;
           mask.matrix.copy(source.matrixWorld);
           this.maskScene.add(mask);
         }
+        if (this.maskScene.children.length === 0) continue;
         renderer.setRenderTarget(this.target);
         renderer.setClearColor(0x000000, 0);
         renderer.clear(true, false, false);
