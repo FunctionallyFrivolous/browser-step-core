@@ -605,7 +605,7 @@ export function setGeometryGroupHiddenBodies(
 export function setGeometryGroupSelection(
   group: THREE.Group,
   selectedFaceIndices: ReadonlySet<number>,
-  scope: SelectionScope = "face",
+  scope: SelectionScope = "object",
 ): void {
   const facesByBody = new Map<number, number[]>();
   group.traverse((object) => {
@@ -809,7 +809,7 @@ export function createStepRenderer(
   controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
   let shadingMode: ShadingMode = "flat";
-  let selectionScope: SelectionScope = "face";
+  let selectionScope: SelectionScope = "object";
   let selectedFaceIndices: readonly number[] = [];
   let edgeThickness = 1;
   let showSmoothEdges = true;
