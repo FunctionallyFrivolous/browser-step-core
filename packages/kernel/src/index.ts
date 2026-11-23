@@ -154,6 +154,7 @@ export class LibcascadeKernel implements CadKernel {
 
       try {
         let faceIndex = 0;
+        const edgePolylines = new Map<number, Float32Array>();
         while (explorer.More()) {
           const current = explorer.Current();
 
@@ -220,18 +221,22 @@ export class LibcascadeKernel implements CadKernel {
                       try {
                         const edgeIndex = edgeMap.FindIndex(edgeShape) - 1;
                         if (!edges.has(edgeIndex)) {
-                          const edge = oc.TopoDS.Edge(edgeShape);
-                          try {
-                            const edgePositions = this.getEdgePolyline(
-                              edge,
-                              triangulation,
-                            );
-                            if (edgePositions.length > 0) {
-                              edges.set(edgeIndex, edgePositions);
+                          let edgePositions = edgePolylines.get(edgeIndex);
+                          if (!edgePositions) {
+                            const edge = oc.TopoDS.Edge(edgeShape);
+                            try {
+                              edgePositions = this.getEdgePolyline(
+                                edge,
+                                triangulation,
+                              );
+                              if (edgePositions.length > 0) {
+                                edgePolylines.set(edgeIndex, edgePositions);
+                              }
+                            } finally {
+                              edge.delete();
                             }
-                          } finally {
-                            edge.delete();
                           }
+                          if (edgePositions?.length) edges.set(edgeIndex, edgePositions);
                         }
                       } finally {
                         edgeShape.delete();
@@ -313,7 +318,7 @@ export class LibcascadeKernel implements CadKernel {
     );
     if (!polygon) {
       location.delete();
-      return new Float32Array();
+      return this.getCurvePolyline(edge);
     }
 
     const nodes = polygon.Nodes();
@@ -334,6 +339,45 @@ export class LibcascadeKernel implements CadKernel {
       transform.delete();
       nodes.delete();
       polygon.delete();
+      location.delete();
+    }
+
+    if (positions.length >= 6) return new Float32Array(positions);
+    return this.getCurvePolyline(edge);
+  }
+
+  private getCurvePolyline(
+    edge: import("libcascade/single/init").TopoDS_Edge,
+  ): Float32Array {
+    const oc = this.oc!;
+    const location = new oc.TopLoc_Location();
+    const curveResult = oc.BRep_Tool.Curve(edge, location);
+    const curve = curveResult.returnValue;
+    if (!curve || !Number.isFinite(curveResult.First) || !Number.isFinite(curveResult.Last)) {
+      curve?.delete();
+      location.delete();
+      return new Float32Array();
+    }
+
+    const transform = location.Transformation();
+    const positions: number[] = [];
+    const sampleCount = 32;
+
+    try {
+      for (let index = 0; index <= sampleCount; index += 1) {
+        const parameter = curveResult.First +
+          (curveResult.Last - curveResult.First) * index / sampleCount;
+        const point = curve.Value(parameter);
+        try {
+          point.Transform(transform);
+          positions.push(point.X(), point.Y(), point.Z());
+        } finally {
+          point.delete();
+        }
+      }
+    } finally {
+      transform.delete();
+      curve.delete();
       location.delete();
     }
 

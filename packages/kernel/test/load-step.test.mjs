@@ -46,9 +46,19 @@ test("assigns each face to its containing solid", async () => {
   const kernel = new LibcascadeKernel();
   await kernel.loadStep(data);
 
-  const bodyIndices = new Set(
-    kernel.getTessellation().map((mesh) => mesh.bodyIndex),
-  );
+  const meshes = kernel.getTessellation();
+  const bodyIndices = new Set(meshes.map((mesh) => mesh.bodyIndex));
+  const edgeFaces = new Map();
+  for (const mesh of meshes) {
+    for (const edge of mesh.edges) {
+      const faces = edgeFaces.get(edge.edgeIndex) ?? [];
+      faces.push(mesh.faceIndex);
+      edgeFaces.set(edge.edgeIndex, faces);
+    }
+  }
+
   assert.equal(kernel.getBodyCount(), 3);
   assert.deepEqual([...bodyIndices].sort(), [0, 1, 2]);
+  assert.ok(edgeFaces.size > 0);
+  assert.ok([...edgeFaces.values()].every((faces) => faces.length === 2));
 });

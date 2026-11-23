@@ -121,15 +121,15 @@ const selectionScopeControl = document.createElement("fieldset");
 const selectionScopeLegend = document.createElement("legend");
 selectionScopeLegend.textContent = "Selection Scope";
 selectionScopeControl.append(selectionScopeLegend);
-for (const scope of ["object", "face"] as const) {
+for (const scope of ["object", "face", "edge"] as const) {
   const label = document.createElement("label");
   const input = document.createElement("input");
   input.type = "radio";
   input.name = "selection-scope";
   input.value = scope;
   input.checked = scope === "object";
-  input.setAttribute("aria-label", scope === "object" ? "Body" : "Face");
-  label.append(input, scope === "object" ? "Body" : "Face");
+  input.setAttribute("aria-label", scope === "object" ? "Body" : scope === "face" ? "Face" : "Edge");
+  label.append(input, scope === "object" ? "Body" : scope === "face" ? "Face" : "Edge");
   selectionScopeControl.append(label);
 }
 
@@ -164,10 +164,27 @@ const selection = new SelectionModel();
 const style = new StyleStateModel();
 const view = new ViewStateModel();
 let selectionScope: SelectionScope = "object";
+const selectedEdgeIndices = new Set<number>();
+const edgeThicknessOverrides = new Map<number, number>();
+let globalEdgeThickness = Number(edgeThicknessSlider.value);
 let bodyFaces = new Map<number, number[]>();
 let hiddenBodies = new Set<number>();
 let updatingViewFromRenderer = false;
-const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex) => {
+const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) => {
+  if (selectionScope === "edge") {
+    if (edgeIndex === undefined) {
+      selectedEdgeIndices.clear();
+    } else if (selectedEdgeIndices.has(edgeIndex)) {
+      selectedEdgeIndices.delete(edgeIndex);
+    } else {
+      selectedEdgeIndices.add(edgeIndex);
+    }
+    renderer.setSelectedEdges([...selectedEdgeIndices]);
+    updateSelectionStatus();
+    updateEdgeThicknessControl();
+    return;
+  }
+
   if (faceIndex === undefined) {
     selection.clear();
   } else if (selectionScope === "object") {
@@ -199,10 +216,28 @@ opacityValue.textContent = opacityValue.value;
 renderer.setStyleState(initialStyle);
 selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
-  const count = selectedFaceIndices.length;
-  selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
+  updateSelectionStatus();
   updateBodyVisibilityControl();
 });
+
+function updateSelectionStatus(): void {
+  if (selectionScope === "edge") {
+    const count = selectedEdgeIndices.size;
+    selectionStatus.textContent = `${count} edge${count === 1 ? "" : "s"} selected`;
+  } else {
+    const count = selection.selectedFaces.length;
+    selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
+  }
+}
+
+function updateEdgeThicknessControl(): void {
+  const selectedThickness = [...selectedEdgeIndices]
+    .map((edgeIndex) => edgeThicknessOverrides.get(edgeIndex) ?? globalEdgeThickness)[0];
+  const thickness = selectedThickness ?? globalEdgeThickness;
+  edgeThicknessSlider.value = String(thickness);
+  edgeThicknessValue.value = `${thickness} px`;
+  edgeThicknessValue.textContent = edgeThicknessValue.value;
+}
 
 function getSelectedBodyIndices(): number[] {
   const selectedFaces = new Set(selection.selectedFaces);
@@ -237,9 +272,15 @@ hideBodiesButton.addEventListener("click", () => {
 selectionScopeControl.addEventListener("change", (event) => {
   const input = event.target;
   if (!(input instanceof HTMLInputElement) || !input.checked) return;
-  selectionScope = input.value === "object" ? "object" : "face";
+  selectionScope = input.value === "object"
+    ? "object"
+    : input.value === "edge" ? "edge" : "face";
+  selectedEdgeIndices.clear();
+  renderer.setSelectedEdges([]);
   selection.clear();
   renderer.setSelectionScope(selectionScope);
+  updateSelectionStatus();
+  updateEdgeThicknessControl();
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
@@ -271,7 +312,16 @@ opacitySlider.addEventListener("input", () => {
 });
 edgeThicknessSlider.addEventListener("input", () => {
   const thickness = Number(edgeThicknessSlider.value);
-  renderer.setEdgeThickness(thickness);
+  if (selectionScope === "edge" && selectedEdgeIndices.size > 0) {
+    renderer.setEdgeThickness(thickness, [...selectedEdgeIndices]);
+    for (const edgeIndex of selectedEdgeIndices) {
+      edgeThicknessOverrides.set(edgeIndex, thickness);
+    }
+  } else {
+    globalEdgeThickness = thickness;
+    edgeThicknessOverrides.clear();
+    renderer.setEdgeThickness(thickness);
+  }
   edgeThicknessValue.value = `${thickness} px`;
   edgeThicknessValue.textContent = edgeThicknessValue.value;
 });
@@ -302,6 +352,9 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     await session.load(await readData());
     const meshes = session.tessellation;
     selection.clear();
+    selectedEdgeIndices.clear();
+    edgeThicknessOverrides.clear();
+    renderer.setSelectedEdges([]);
     bodyFaces = new Map();
     for (const mesh of meshes) {
       const bodyIndex = mesh.bodyIndex ?? mesh.faceIndex;

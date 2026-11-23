@@ -10,8 +10,10 @@ import {
   PointerGestureTracker,
   raycastFace,
   raycastFaceIndex,
+  raycastEdge,
   renderSceneWithDepthPrepass,
   setGeometryGroupEdgeThickness,
+  setGeometryGroupEdgeSelection,
   setGeometryGroupFaceColor,
   setGeometryGroupHiddenBodies,
   setGeometryGroupOpacity,
@@ -220,6 +222,61 @@ test("ignores nearby boundary lines when picking faces", () => {
   assert.equal(raycastFaceIndex(raycaster, group), 4);
   group.visible = false;
   assert.equal(raycastFaceIndex(raycaster, group), undefined);
+
+  disposeGroup(group);
+});
+
+test("picks and highlights BREP edges and edits selected-edge thickness", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [
+        { edgeIndex: 9, positions: new Float32Array([0, 0, 0, 1, 0, 0]) },
+        { edgeIndex: 10, positions: new Float32Array([0, 0, 0, 0, 1, 0]) },
+      ],
+    },
+  ]);
+  const faceRay = new THREE.Raycaster(
+    new THREE.Vector3(0.25, 0.1, 2),
+    new THREE.Vector3(0, 0, -1),
+  );
+  const pickedEdge = raycastEdge(
+    faceRay,
+    group,
+    4,
+    new THREE.Vector3(0.25, 0.1, 0),
+  );
+  assert.equal(pickedEdge.edgeIndex, 9);
+  assert.equal(pickedEdge.faceIndex, 4);
+
+  const edgeRay = new THREE.Raycaster(
+    new THREE.Vector3(0.5, 0.05, 2),
+    new THREE.Vector3(0, 0, -1),
+  );
+  assert.equal(raycastEdge(edgeRay, group).edgeIndex, 9);
+
+  setGeometryGroupEdgeSelection(group, [9]);
+  let edgeHighlight = group.children.find(
+    (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
+  );
+  assert.equal(edgeHighlight.visible, true);
+  setGeometryGroupEdgeThickness(group, 4, [9]);
+  edgeHighlight = group.children.find(
+    (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
+  );
+  assert.equal(edgeHighlight.material.linewidth, 4);
+  assert.equal(edgeHighlight.visible, true);
+
+  setGeometryGroupEdgeSelection(group, []);
+  edgeHighlight = group.children.find(
+    (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
+  );
+  assert.equal(edgeHighlight, undefined);
+  setGeometryGroupHiddenBodies(group, new Set([0]));
+  assert.equal(raycastEdge(edgeRay, group), undefined);
 
   disposeGroup(group);
 });
