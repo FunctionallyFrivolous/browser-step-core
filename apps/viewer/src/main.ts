@@ -45,6 +45,16 @@ fitButton.type = "button";
 fitButton.textContent = "Fit model to view";
 fitButton.disabled = true;
 
+const saveViewButton = document.createElement("button");
+saveViewButton.type = "button";
+saveViewButton.textContent = "Save View";
+saveViewButton.disabled = true;
+
+const revertViewButton = document.createElement("button");
+revertViewButton.type = "button";
+revertViewButton.textContent = "Revert to Saved View";
+revertViewButton.disabled = true;
+
 const hideBodiesButton = document.createElement("button");
 hideBodiesButton.type = "button";
 hideBodiesButton.textContent = "Hide Bodies";
@@ -161,6 +171,8 @@ controls.append(
   orbitModeControl,
   lightingControl,
   fitButton,
+  saveViewButton,
+  revertViewButton,
   smoothEdgesControl,
 );
 
@@ -171,6 +183,7 @@ const commandManager = new CommandManager();
 const selection = new SelectionModel();
 const style = new StyleStateModel();
 const view = new ViewStateModel();
+let hasInitialSavedView = false;
 let selectionScope: SelectionScope = "object";
 const selectedEdgeIndices = new Set<number>();
 const edgeThicknessOverrides = new Map<number, number>();
@@ -305,6 +318,8 @@ selectionScopeControl.addEventListener("change", (event) => {
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
+saveViewButton.addEventListener("click", () => view.saveBookmark("saved-view"));
+revertViewButton.addEventListener("click", () => view.restoreBookmark("saved-view"));
 projectionSelect.addEventListener("change", () => {
   const projection: CameraProjection =
     projectionSelect.value === "perspective" ? "perspective" : "orthographic";
@@ -392,6 +407,12 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     updateBodyVisibilityControl();
     renderer.renderMeshes(meshes, style.state);
     fitButton.disabled = false;
+    if (!hasInitialSavedView) {
+      view.saveBookmark("saved-view");
+      hasInitialSavedView = true;
+      saveViewButton.disabled = false;
+      revertViewButton.disabled = false;
+    }
     status.textContent =
       `${name} — ${session.bodyCount} bodies, ${session.faceCount} faces`;
   } catch (error) {

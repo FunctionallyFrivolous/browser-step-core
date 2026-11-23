@@ -15,6 +15,7 @@ export interface ViewState {
   projection: CameraProjection;
   position: [number, number, number];
   target: [number, number, number];
+  up?: [number, number, number];
   verticalSpan: number;
   near: number;
   far: number;
@@ -80,15 +81,23 @@ export class StyleStateModel {
 }
 
 function copyViewState(state: ViewState): ViewState {
-  return { ...state, position: [...state.position], target: [...state.target] };
+  return {
+    ...state,
+    position: [...state.position],
+    target: [...state.target],
+    up: [...(state.up ?? [0, 1, 0])],
+  };
 }
 
 function validateViewState(state: ViewState): void {
+  const up = state.up ?? [0, 1, 0];
   if (
     (state.projection !== "orthographic" && state.projection !== "perspective") ||
     state.position.length !== 3 ||
     state.target.length !== 3 ||
-    ![...state.position, ...state.target, state.verticalSpan, state.near, state.far].every(Number.isFinite) ||
+    up.length !== 3 ||
+    ![...state.position, ...state.target, ...up, state.verticalSpan, state.near, state.far].every(Number.isFinite) ||
+    up.every((value) => value === 0) ||
     state.verticalSpan <= 0 ||
     state.near <= 0 ||
     state.far <= state.near ||
@@ -132,7 +141,8 @@ export class ViewStateModel {
       state.near === previous.near &&
       state.far === previous.far &&
       state.position.every((value, index) => value === previous.position[index]) &&
-      state.target.every((value, index) => value === previous.target[index])
+      state.target.every((value, index) => value === previous.target[index]) &&
+      (state.up ?? [0, 1, 0]).every((value, index) => value === previous.up?.[index])
     ) return;
 
     this.current = copyViewState(state);

@@ -85,12 +85,31 @@ test("saves, overwrites, restores, and deletes independent bookmarks", () => {
   assert.deepEqual(view.bookmarks, ["side"]);
 });
 
+test("bookmarks preserve independent camera up vectors and notify on roll changes", () => {
+  const view = new ViewStateModel();
+  const initial = view.state;
+  const rolled = { ...initial, up: [1, 0, 0] };
+  const events = [];
+  view.subscribe((state) => events.push(state));
+  view.setState(rolled);
+  view.saveBookmark("saved");
+  rolled.up[0] = 0;
+  view.state.up[0] = 0;
+  view.setState(initial);
+  assert.equal(view.restoreBookmark("saved"), true);
+  assert.deepEqual(view.state.up, [1, 0, 0]);
+  assert.equal(events.length, 3);
+});
+
 test("rejects invalid camera state without changing the current view", () => {
   const view = new ViewStateModel();
   const initial = view.state;
   for (const invalid of [
     { ...initial, position: [NaN, 0, 0] },
     { ...initial, target: [0, 0] },
+    { ...initial, up: [0, 0, 0] },
+    { ...initial, up: [0, NaN, 0] },
+    { ...initial, up: [0, 1] },
     { ...initial, projection: "invalid" },
     { ...initial, verticalSpan: 0 },
     { ...initial, near: -1 },
