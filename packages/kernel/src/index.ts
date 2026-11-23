@@ -11,6 +11,12 @@ export interface TriangleMesh {
   indices: Uint32Array;
   faceIndex: number;
   bodyIndex: number;
+  edges: EdgePolyline[];
+}
+
+export interface EdgePolyline {
+  edgeIndex: number;
+  positions: Float32Array;
 }
 
 export class LibcascadeKernel implements CadKernel {
@@ -95,8 +101,14 @@ export class LibcascadeKernel implements CadKernel {
     const oc = this.oc;
     const mesher = new oc.BRepMesh_IncrementalMesh(this.shape, 0.1, false, 0.5, true);
     const meshes: TriangleMesh[] = [];
+    const edgeMap = new oc.NCollection_IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher();
 
     try {
+      oc.TopExp.MapShapes(
+        this.shape,
+        oc.TopAbs_ShapeEnum.TopAbs_EDGE,
+        edgeMap,
+      );
       const bodyIndices: number[] = [];
       const solidExplorer = new oc.TopExp_Explorer(
         this.shape,
@@ -157,6 +169,7 @@ export class LibcascadeKernel implements CadKernel {
                   const transform = location.Transformation();
                   const positions: number[] = [];
                   const indices: number[] = [];
+                  const edges = new Map<number, Float32Array>();
 
                   try {
                     for (
@@ -197,12 +210,48 @@ export class LibcascadeKernel implements CadKernel {
                     transform.delete();
                   }
 
+                  const edgeExplorer = new oc.TopExp_Explorer(
+                    face,
+                    oc.TopAbs_ShapeEnum.TopAbs_EDGE,
+                  );
+                  try {
+                    while (edgeExplorer.More()) {
+                      const edgeShape = edgeExplorer.Current();
+                      try {
+                        const edgeIndex = edgeMap.FindIndex(edgeShape) - 1;
+                        if (!edges.has(edgeIndex)) {
+                          const edge = oc.TopoDS.Edge(edgeShape);
+                          try {
+                            const edgePositions = this.getEdgePolyline(
+                              edge,
+                              triangulation,
+                            );
+                            if (edgePositions.length > 0) {
+                              edges.set(edgeIndex, edgePositions);
+                            }
+                          } finally {
+                            edge.delete();
+                          }
+                        }
+                      } finally {
+                        edgeShape.delete();
+                      }
+                      edgeExplorer.Next();
+                    }
+                  } finally {
+                    edgeExplorer.delete();
+                  }
+
                   if (indices.length > 0) {
                     meshes.push({
                       positions: new Float32Array(positions),
                       indices: new Uint32Array(indices),
                       faceIndex,
                       bodyIndex: bodyIndices[faceIndex] ?? this.bodyCount,
+                      edges: [...edges].map(([edgeIndex, edgePositions]) => ({
+                        edgeIndex,
+                        positions: edgePositions,
+                      })),
                     });
                   }
                 }
@@ -225,6 +274,7 @@ export class LibcascadeKernel implements CadKernel {
         explorer.delete();
       }
     } finally {
+      edgeMap.delete();
       mesher.delete();
     }
 
@@ -248,5 +298,45 @@ export class LibcascadeKernel implements CadKernel {
     }
 
     return count;
+  }
+
+  private getEdgePolyline(
+    edge: import("libcascade/single/init").TopoDS_Edge,
+    triangulation: import("libcascade/single/init").Poly_Triangulation,
+  ): Float32Array {
+    const oc = this.oc!;
+    const location = new oc.TopLoc_Location();
+    const polygon = oc.BRep_Tool.PolygonOnTriangulation(
+      edge,
+      triangulation,
+      location,
+    );
+    if (!polygon) {
+      location.delete();
+      return new Float32Array();
+    }
+
+    const nodes = polygon.Nodes();
+    const transform = location.Transformation();
+    const positions: number[] = [];
+
+    try {
+      for (let index = nodes.Lower(); index <= nodes.Upper(); index += 1) {
+        const point = triangulation.Node(nodes.Value(index));
+        try {
+          point.Transform(transform);
+          positions.push(point.X(), point.Y(), point.Z());
+        } finally {
+          point.delete();
+        }
+      }
+    } finally {
+      transform.delete();
+      nodes.delete();
+      polygon.delete();
+      location.delete();
+    }
+
+    return new Float32Array(positions);
   }
 }
