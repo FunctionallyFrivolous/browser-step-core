@@ -45,6 +45,14 @@ fitButton.type = "button";
 fitButton.textContent = "Fit model to view";
 fitButton.disabled = true;
 
+const saveViewButton = document.createElement("button");
+saveViewButton.type = "button";
+saveViewButton.textContent = "Save View";
+
+const revertViewButton = document.createElement("button");
+revertViewButton.type = "button";
+revertViewButton.textContent = "Revert to Saved View";
+
 const hideBodiesButton = document.createElement("button");
 hideBodiesButton.type = "button";
 hideBodiesButton.textContent = "Hide Bodies";
@@ -161,6 +169,8 @@ controls.append(
   orbitModeControl,
   lightingControl,
   fitButton,
+  saveViewButton,
+  revertViewButton,
   smoothEdgesControl,
 );
 
@@ -213,6 +223,7 @@ view.subscribe((state) => {
   if (!updatingViewFromRenderer) renderer.setViewState(state);
 });
 renderer.setViewState(view.state);
+view.saveBookmark("saved-view");
 style.subscribe((state) => {
   renderer.setStyleState(state);
 });
@@ -305,6 +316,8 @@ selectionScopeControl.addEventListener("change", (event) => {
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
+saveViewButton.addEventListener("click", () => view.saveBookmark("saved-view"));
+revertViewButton.addEventListener("click", () => view.restoreBookmark("saved-view"));
 projectionSelect.addEventListener("change", () => {
   const projection: CameraProjection =
     projectionSelect.value === "perspective" ? "perspective" : "orthographic";
