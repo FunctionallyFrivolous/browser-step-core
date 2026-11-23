@@ -8,6 +8,7 @@ import {
 import {
   createStepRenderer,
   type CameraProjection,
+  type OrbitMode,
   type SelectionScope,
 } from "@browser-step/renderer";
 import { defaultSample, sampleModels } from "@browser-step/samples";
@@ -58,6 +59,12 @@ for (const projection of ["orthographic", "perspective"] as const) {
   projectionSelect.append(option);
 }
 projectionSelect.value = "orthographic";
+
+const orbitModeControl = document.createElement("label");
+const freeOrbitToggle = document.createElement("input");
+freeOrbitToggle.type = "checkbox";
+freeOrbitToggle.setAttribute("aria-label", "Free orbit controls");
+orbitModeControl.append(freeOrbitToggle, "Free Orbit");
 
 const lightingControl = document.createElement("label");
 const lightingToggle = document.createElement("input");
@@ -151,6 +158,7 @@ controls.append(
   opacityControl,
   edgeThicknessControl,
   projectionSelect,
+  orbitModeControl,
   lightingControl,
   fitButton,
   smoothEdgesControl,
@@ -301,6 +309,10 @@ projectionSelect.addEventListener("change", () => {
   const projection: CameraProjection =
     projectionSelect.value === "perspective" ? "perspective" : "orthographic";
   renderer.setProjection(projection);
+});
+freeOrbitToggle.addEventListener("change", () => {
+  const mode: OrbitMode = freeOrbitToggle.checked ? "free" : "constrained";
+  renderer.setOrbitMode(mode);
 });
 lightingToggle.addEventListener("change", () => {
   renderer.setShadingMode(lightingToggle.checked ? "original" : "flat");

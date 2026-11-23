@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TrackballControls } from "three/addons/controls/TrackballControls.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
@@ -21,7 +22,22 @@ export interface EdgePolyline {
 
 export type { CameraProjection } from "@browser-step/core";
 export type ShadingMode = "flat" | "original";
+export type OrbitMode = "constrained" | "free";
 export type SelectionScope = "face" | "object" | "edge";
+
+type CameraControls = OrbitControls<THREE.Camera> | TrackballControls;
+
+export function createCameraControls(
+  camera: THREE.Camera,
+  domElement: HTMLElement | null,
+  mode: OrbitMode,
+): CameraControls {
+  if (mode === "free") return new TrackballControls(camera, domElement);
+
+  const controls = new OrbitControls(camera, domElement);
+  controls.enableDamping = true;
+  return controls;
+}
 
 export interface PickedFace {
   faceIndex: number;
@@ -1112,6 +1128,7 @@ export function createStepRenderer(
   setFaceOpacity(opacity: number, faceIndices: readonly number[]): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
+  setOrbitMode(mode: OrbitMode): void;
   setViewState(state: ViewState): void;
   setShadingMode(shadingMode: ShadingMode): void;
   setEdgeThickness(edgeThickness: number, edgeIndices?: readonly number[]): void;
@@ -1137,11 +1154,12 @@ export function createStepRenderer(
   light.position.set(1, 2, 3);
   scene.add(light);
 
-  let controls: OrbitControls<THREE.Camera> = new OrbitControls(
+  let orbitMode: OrbitMode = "constrained";
+  let controls: CameraControls = createCameraControls(
     camera,
     renderer.domElement,
+    orbitMode,
   );
-  controls.enableDamping = true;
   let geometryGroup: THREE.Group | undefined;
   let shadingMode: ShadingMode = "flat";
   let selectionScope: SelectionScope = "object";
@@ -1183,6 +1201,7 @@ export function createStepRenderer(
       camera.right = horizontalSpan / 2;
     }
     camera.updateProjectionMatrix();
+    if (controls instanceof TrackballControls) controls.handleResize();
     onViewChange(getCameraViewState(camera, controls.target));
   };
 
@@ -1229,8 +1248,19 @@ export function createStepRenderer(
     const nextCamera = switchCameraProjection(camera, target, projection, aspect);
     controls.dispose();
     camera = nextCamera;
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+    controls = createCameraControls(camera, renderer.domElement, orbitMode);
+    controls.target.copy(target);
+    controls.update();
+    onViewChange(getCameraViewState(camera, controls.target));
+  };
+
+  const setOrbitMode = (mode: OrbitMode) => {
+    if (orbitMode === mode) return;
+
+    const target = controls.target.clone();
+    controls.dispose();
+    orbitMode = mode;
+    controls = createCameraControls(camera, renderer.domElement, orbitMode);
     controls.target.copy(target);
     controls.update();
     onViewChange(getCameraViewState(camera, controls.target));
@@ -1239,8 +1269,7 @@ export function createStepRenderer(
   const setViewState = (state: ViewState) => {
     controls.dispose();
     camera = createCameraFromViewState(state, aspect);
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+    controls = createCameraControls(camera, renderer.domElement, orbitMode);
     controls.target.fromArray(state.target);
     controls.update();
   };
@@ -1440,6 +1469,7 @@ export function createStepRenderer(
     setHiddenBodies,
     fitToView,
     setProjection,
+    setOrbitMode,
     setViewState,
     setShadingMode,
     setStyleState,
