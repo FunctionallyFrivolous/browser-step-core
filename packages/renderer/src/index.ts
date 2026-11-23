@@ -491,8 +491,12 @@ export function setGeometryGroupOpacity(
     if (!(object instanceof THREE.Mesh) || object.userData.isEdgeLine) return;
     if (selectedFaceIndices.size > 0 && !selectedFaceIndices.has(object.userData.faceIndex)) return;
 
-    if (selectedFaceIndices.size > 0) object.userData.faceOpacity = clampedOpacity;
-    else delete object.userData.faceOpacity;
+    if (selectedFaceIndices.size > 0) {
+      object.userData.faceOpacity = clampedOpacity;
+      object.userData.isSelectionColorApplied = true;
+    } else {
+      delete object.userData.faceOpacity;
+    }
 
     const materials = Array.isArray(object.material)
       ? object.material
@@ -502,6 +506,11 @@ export function setGeometryGroupOpacity(
         material instanceof THREE.MeshBasicMaterial ||
         material instanceof THREE.MeshStandardMaterial
       ) {
+        if (selectedFaceIndices.size > 0) {
+          material.color.set(
+            object.userData.faceColor ?? group.userData.faceColor ?? FACE_COLOR,
+          );
+        }
         setFaceMaterialOpacity(material, clampedOpacity);
       }
     }
