@@ -77,6 +77,20 @@ test("restores a perspective view with its position, target, scale, and clipping
   assert.deepEqual({ ...restoredState, verticalSpan: state.verticalSpan }, state);
 });
 
+test("restores free-orbit camera roll and preserves it when switching projection", () => {
+  const camera = new THREE.OrthographicCamera(-2, 2, 1, -1, 0.1, 100);
+  camera.position.set(0, 0, 10);
+  camera.up.set(1, 0, 0);
+  const target = new THREE.Vector3();
+  camera.lookAt(target);
+  const state = getCameraViewState(camera, target);
+  const restored = createCameraFromViewState(state, 2);
+  assert.deepEqual(restored.up.toArray(), [1, 0, 0]);
+  assert.ok(restored.quaternion.angleTo(camera.quaternion) < 1e-10);
+  const perspective = switchCameraProjection(restored, target, "perspective", 2);
+  assert.deepEqual(perspective.up.toArray(), [1, 0, 0]);
+});
+
 test("switches projection without clipping a zoomed-out fitted view", () => {
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
   camera.position.set(6, 8, 12);

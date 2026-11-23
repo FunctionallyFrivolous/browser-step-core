@@ -67,6 +67,7 @@ export function getCameraViewState(
     projection: camera instanceof THREE.OrthographicCamera ? "orthographic" : "perspective",
     position: camera.position.toArray(),
     target: target.toArray(),
+    up: camera.up.toArray(),
     verticalSpan,
     near: camera.near,
     far: camera.far,
@@ -95,6 +96,7 @@ export function createCameraFromViewState(
       state.far,
     );
   camera.position.fromArray(state.position);
+  camera.up.fromArray(state.up ?? [0, 1, 0]);
   camera.lookAt(...state.target);
   camera.updateProjectionMatrix();
   return camera;
