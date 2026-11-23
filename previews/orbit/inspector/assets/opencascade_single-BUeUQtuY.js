@@ -1,0 +1,1 @@
+var e=`/browser-step-core/previews/orbit/inspector/assets/opencascade_single-CyyDj5yL.wasm`;export{e as default};
