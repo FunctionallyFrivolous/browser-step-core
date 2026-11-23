@@ -4,6 +4,7 @@ import * as THREE from "three";
 import {
   createGeometryGroup,
   createCameraFromViewState,
+  getEdgeIndicesForFaces,
   fitCameraToBounds,
   fitOrthographicCameraToBounds,
   getCameraViewState,
@@ -277,6 +278,54 @@ test("picks and highlights BREP edges and edits selected-edge thickness", () => 
   assert.equal(edgeHighlight, undefined);
   setGeometryGroupHiddenBodies(group, new Set([0]));
   assert.equal(raycastEdge(edgeRay, group), undefined);
+
+  disposeGroup(group);
+});
+
+test("applies thickness only to requested BREP edges and globally when unscoped", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [
+        { edgeIndex: 9, positions: new Float32Array([0, 0, 0, 1, 0, 0]) },
+        { edgeIndex: 10, positions: new Float32Array([0, 0, 0, 0, 1, 0]) },
+      ],
+    },
+    {
+      faceIndex: 5,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0, 1]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [
+        { edgeIndex: 9, positions: new Float32Array([0, 0, 0, 1, 0, 0]) },
+        { edgeIndex: 11, positions: new Float32Array([0, 0, 0, 0, 0, 1]) },
+      ],
+    },
+  ]);
+  const edgeLine = (edgeIndex) => group.children.find(
+    (child) =>
+      child.userData.isTopologicalEdgeLine &&
+      child.userData.edgeIndex === edgeIndex,
+  );
+
+  assert.equal(edgeLine(9).material.linewidth, 1);
+  assert.equal(edgeLine(10).material.linewidth, 1);
+  assert.equal(edgeLine(11).material.linewidth, 1);
+  assert.deepEqual(getEdgeIndicesForFaces(group, [4]), [9, 10]);
+  assert.deepEqual(getEdgeIndicesForFaces(group, [4, 5]), [9, 10, 11]);
+
+  setGeometryGroupEdgeThickness(group, 4, [9, 10]);
+  assert.equal(edgeLine(9).material.linewidth, 4);
+  assert.equal(edgeLine(10).material.linewidth, 4);
+  assert.equal(edgeLine(11).material.linewidth, 1);
+
+  setGeometryGroupEdgeThickness(group, 2);
+  assert.equal(edgeLine(9).material.linewidth, 2);
+  assert.equal(edgeLine(10).material.linewidth, 2);
+  assert.equal(edgeLine(11).material.linewidth, 2);
 
   disposeGroup(group);
 });

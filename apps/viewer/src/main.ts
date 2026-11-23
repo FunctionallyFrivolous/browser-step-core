@@ -217,6 +217,7 @@ renderer.setStyleState(initialStyle);
 selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
   updateSelectionStatus();
+  updateEdgeThicknessControl();
   updateBodyVisibilityControl();
 });
 
@@ -231,12 +232,24 @@ function updateSelectionStatus(): void {
 }
 
 function updateEdgeThicknessControl(): void {
-  const selectedThickness = [...selectedEdgeIndices]
+  const targets = getSelectedEdgeIndices();
+  const selectedThickness = (targets ?? [])
     .map((edgeIndex) => edgeThicknessOverrides.get(edgeIndex) ?? globalEdgeThickness)[0];
   const thickness = selectedThickness ?? globalEdgeThickness;
   edgeThicknessSlider.value = String(thickness);
   edgeThicknessValue.value = `${thickness} px`;
   edgeThicknessValue.textContent = edgeThicknessValue.value;
+}
+
+function getSelectedEdgeIndices(): number[] | undefined {
+  if (selectionScope === "edge" && selectedEdgeIndices.size > 0) {
+    return [...selectedEdgeIndices];
+  }
+
+  const selectedFaces = selection.selectedFaces;
+  if (selectedFaces.length === 0) return undefined;
+  const edgeIndices = renderer.getEdgeIndicesForFaces(selectedFaces);
+  return edgeIndices.length > 0 ? edgeIndices : undefined;
 }
 
 function getSelectedBodyIndices(): number[] {
@@ -312,9 +325,10 @@ opacitySlider.addEventListener("input", () => {
 });
 edgeThicknessSlider.addEventListener("input", () => {
   const thickness = Number(edgeThicknessSlider.value);
-  if (selectionScope === "edge" && selectedEdgeIndices.size > 0) {
-    renderer.setEdgeThickness(thickness, [...selectedEdgeIndices]);
-    for (const edgeIndex of selectedEdgeIndices) {
+  const targetEdgeIndices = getSelectedEdgeIndices();
+  renderer.setEdgeThickness(thickness, targetEdgeIndices);
+  if (targetEdgeIndices) {
+    for (const edgeIndex of targetEdgeIndices) {
       edgeThicknessOverrides.set(edgeIndex, thickness);
     }
   } else {

@@ -380,6 +380,18 @@ function createLineSegmentsFromPolyline(positions: Float32Array): number[] {
   return segments;
 }
 
+function getTopologicalEdgeKey(edge: TopologicalEdge): string {
+  const coordinates = [0, edge.positions.length - 3].map((offset) =>
+    [
+      edge.positions[offset],
+      edge.positions[offset + 1],
+      edge.positions[offset + 2],
+    ].map((coordinate) => Math.round(coordinate * 100_000)).join(","),
+  );
+  coordinates.sort();
+  return coordinates.join(":");
+}
+
 function updateEdgeVisibility(
   object: THREE.Object3D,
   edgeThickness: number,
@@ -407,6 +419,9 @@ export function createGeometryGroup(
   );
   const smoothEdges = findSmoothBoundaryEdges(meshes);
   const topologicalEdges = getTopologicalEdges(meshes);
+  const hasTopologicalEdgeGeometry = [...topologicalEdges.values()].some(
+    (edge) => edge.positions.length >= 6,
+  );
 
   for (const mesh of meshes) {
     const bodyIndex = mesh.bodyIndex ?? mesh.faceIndex;
@@ -422,23 +437,25 @@ export function createGeometryGroup(
       mesh,
       smoothEdges,
     )) {
-      const boundary = new LineSegments2(
-        geometry,
-        new LineMaterial({
-          color: EDGE_COLOR,
-          linewidth: clampedEdgeThickness,
-          transparent: false,
-          depthTest: true,
-          depthWrite: true,
-        }),
-      );
-      boundary.userData.isEdgeLine = true;
-      boundary.userData.faceIndex = mesh.faceIndex;
-      boundary.userData.bodyIndex = bodyIndex;
-      boundary.userData.isSmoothEdge = isSmooth;
-      boundary.renderOrder = 0;
-      updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
-      group.add(boundary);
+      if (!hasTopologicalEdgeGeometry) {
+        const boundary = new LineSegments2(
+          geometry,
+          new LineMaterial({
+            color: EDGE_COLOR,
+            linewidth: clampedEdgeThickness,
+            transparent: false,
+            depthTest: true,
+            depthWrite: true,
+          }),
+        );
+        boundary.userData.isEdgeLine = true;
+        boundary.userData.faceIndex = mesh.faceIndex;
+        boundary.userData.bodyIndex = bodyIndex;
+        boundary.userData.isSmoothEdge = isSmooth;
+        boundary.renderOrder = 0;
+        updateEdgeVisibility(boundary, clampedEdgeThickness, showSmoothEdges);
+        group.add(boundary);
+      }
 
       const highlight = new LineSegments2(
         geometry,
@@ -459,6 +476,34 @@ export function createGeometryGroup(
       highlight.renderOrder = 2;
       updateEdgeVisibility(highlight, clampedEdgeThickness*1.5, showSmoothEdges);
       group.add(highlight);
+    }
+  }
+
+  if (hasTopologicalEdgeGeometry) {
+    for (const edge of topologicalEdges.values()) {
+      if (edge.positions.length < 6) continue;
+      const line = new LineSegments2(
+        new LineSegmentsGeometry().setPositions(
+          createLineSegmentsFromPolyline(edge.positions),
+        ),
+        new LineMaterial({
+          color: EDGE_COLOR,
+          linewidth: clampedEdgeThickness,
+          transparent: false,
+          depthTest: true,
+          depthWrite: true,
+        }),
+      );
+      line.userData.isEdgeLine = true;
+      line.userData.isTopologicalEdgeLine = true;
+      line.userData.edgeIndices = [edge.edgeIndex];
+      line.userData.edgeIndex = edge.edgeIndex;
+      line.userData.faceIndices = edge.faceIndices;
+      line.userData.bodyIndex = edge.bodyIndex;
+      line.userData.isSmoothEdge = smoothEdges.has(getTopologicalEdgeKey(edge));
+      line.renderOrder = 0;
+      updateEdgeVisibility(line, clampedEdgeThickness, showSmoothEdges);
+      group.add(line);
     }
   }
 
@@ -632,6 +677,19 @@ export function setGeometryGroupEdgeThickness(
     for (const edgeIndex of edgeIndices) {
       overrides.set(edgeIndex, clampedThickness);
     }
+    group.traverse((object) => {
+      if (
+        !(object instanceof THREE.Mesh) ||
+        !object.userData.isTopologicalEdgeLine ||
+        !edgeIndices.includes(object.userData.edgeIndex)
+      ) return;
+      (object.material as LineMaterial).linewidth = clampedThickness;
+      updateEdgeVisibility(
+        object,
+        clampedThickness,
+        group.userData.showSmoothEdges !== false,
+      );
+    });
     setGeometryGroupEdgeSelection(
       group,
       Array.from(group.userData.selectedEdgeIndices as Set<number>),
@@ -743,6 +801,8 @@ export function setGeometryGroupSmoothEdgesVisible(
     if (!object.userData.isEdgeLine) return;
     const objectThickness = object.userData.isEdgeSelectionHighlight
       ? ((object as THREE.Mesh).material as LineMaterial).linewidth
+      : object.userData.isTopologicalEdgeLine
+        ? ((object as THREE.Mesh).material as LineMaterial).linewidth
       : edgeThickness;
     updateEdgeVisibility(object, objectThickness, showSmoothEdges);
   });
@@ -761,7 +821,8 @@ export function setGeometryGroupHiddenBodies(
     const isHidden = hiddenBodies.has(object.userData.bodyIndex as number);
     object.userData.isBodyHidden = isHidden;
     if (object.userData.isEdgeLine) {
-      const objectThickness = object.userData.isEdgeSelectionHighlight
+      const objectThickness = object.userData.isSelectionHighlight ||
+        object.userData.isTopologicalEdgeLine
         ? (object.material as LineMaterial).linewidth
         : edgeThickness;
       updateEdgeVisibility(object, objectThickness, showSmoothEdges);
@@ -803,7 +864,11 @@ export function setGeometryGroupSelection(
       }
       updateEdgeVisibility(
         object,
-        Math.min(3,Math.max(1,group.userData.edgeThickness ?? 1)),
+        object.userData.isTopologicalEdgeLine
+          ? (object as THREE.Mesh).material instanceof LineMaterial
+            ? ((object as THREE.Mesh).material as LineMaterial).linewidth
+            : group.userData.edgeThickness ?? 1
+          : Math.min(3,Math.max(1,group.userData.edgeThickness ?? 1)),
         group.userData.showSmoothEdges !== false,
       );
       return;
@@ -930,6 +995,17 @@ export function raycastEdge(
   return closest;
 }
 
+export function getEdgeIndicesForFaces(
+  group: THREE.Group,
+  faceIndices: readonly number[],
+): number[] {
+  const selectedFaces = new Set(faceIndices);
+  const edges = group.userData.topologicalEdges as Map<number, TopologicalEdge>;
+  return [...edges.values()]
+    .filter((edge) => edge.faceIndices.some((faceIndex) => selectedFaces.has(faceIndex)))
+    .map((edge) => edge.edgeIndex);
+}
+
 export function raycastFaceIndex(
   raycaster: THREE.Raycaster,
   group: THREE.Group,
@@ -1023,6 +1099,7 @@ export function createStepRenderer(
   renderMeshes(meshes: TriangleMesh[], style: StyleState): void;
   setSelectedFaces(faceIndices: readonly number[]): void;
   setSelectedEdges(edgeIndices: readonly number[]): void;
+  getEdgeIndicesForFaces(faceIndices: readonly number[]): number[];
   setSelectionScope(scope: SelectionScope): void;
   setHiddenBodies(bodyIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
@@ -1231,6 +1308,9 @@ export function createStepRenderer(
     }
   };
 
+  const getSelectedEdgeIndicesForFaces = (faceIndices: readonly number[]) =>
+    geometryGroup ? getEdgeIndicesForFaces(geometryGroup, faceIndices) : [];
+
   const setSelectionScope = (scope: SelectionScope) => {
     selectionScope = scope;
     if (geometryGroup) {
@@ -1350,6 +1430,7 @@ export function createStepRenderer(
     renderMeshes,
     setSelectedFaces,
     setSelectedEdges,
+    getEdgeIndicesForFaces: getSelectedEdgeIndicesForFaces,
     setSelectionScope,
     setHiddenBodies,
     fitToView,
