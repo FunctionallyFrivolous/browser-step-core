@@ -3,6 +3,7 @@ import { test } from "node:test";
 import * as THREE from "three";
 import {
   createGeometryGroup,
+  createCameraControls,
   createCameraFromViewState,
   getEdgeIndicesForFaces,
   fitCameraToBounds,
@@ -24,9 +25,22 @@ import {
   setGeometryGroupSelection,
   switchCameraProjection,
 } from "../src/index.ts";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { TrackballControls } from "three/addons/controls/TrackballControls.js";
 import { BodySilhouettePass } from "../src/body-silhouette.ts";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { SelectionModel, ViewStateModel } from "../../core/src/index.ts";
+
+test("creates constrained and free orbit camera controls", () => {
+  const camera = new THREE.PerspectiveCamera();
+  const constrained = createCameraControls(camera, null, "constrained");
+  assert.ok(constrained instanceof OrbitControls);
+  assert.equal(constrained.enableDamping, true);
+
+  const free = createCameraControls(camera, null, "free");
+  assert.ok(free instanceof TrackballControls);
+  assert.equal(free.staticMoving, false);
+});
 
 test("restores shared camera views including orthographic zoom and clipping", () => {
   const camera = new THREE.OrthographicCamera(-4, 4, 2, -2, 0.1, 200);

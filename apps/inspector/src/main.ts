@@ -1,6 +1,7 @@
 import { ModelSession, SelectionModel, StyleStateModel } from "@browser-step/core";
 import {
   createStepRenderer,
+  type OrbitMode,
   type SelectionScope,
 } from "@browser-step/renderer";
 import { defaultSample, sampleModels } from "@browser-step/samples";
@@ -37,6 +38,12 @@ fitButton.type = "button";
 fitButton.textContent = "Fit model to view";
 fitButton.disabled = true;
 
+const orbitModeControl = document.createElement("label");
+const freeOrbitToggle = document.createElement("input");
+freeOrbitToggle.type = "checkbox";
+freeOrbitToggle.setAttribute("aria-label", "Free orbit controls");
+orbitModeControl.append(freeOrbitToggle, "Free Orbit");
+
 const status = document.createElement("p");
 status.className = "status";
 status.setAttribute("aria-live", "polite");
@@ -71,6 +78,7 @@ app.append(
   fileInput,
   sampleSelect,
   fitButton,
+  orbitModeControl,
   status,
   selectionStatus,
   selectionScopeControl,
@@ -134,6 +142,10 @@ selectionScopeControl.addEventListener("change", (event) => {
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
+freeOrbitToggle.addEventListener("change", () => {
+  const mode: OrbitMode = freeOrbitToggle.checked ? "free" : "constrained";
+  renderer.setOrbitMode(mode);
+});
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
