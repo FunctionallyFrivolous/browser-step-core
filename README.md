@@ -24,7 +24,7 @@ updated with `setState`, observed with `subscribe`, and saved, restored, or
 deleted as named in-memory bookmarks. Bookmarks are not persisted. The viewer
 synchronizes this state with camera navigation, projection changes, and fitting.
 Its **Save View** button replaces the saved view, and **Revert to Saved View**
-restores it. Before the first save, the saved view is the initial camera state.
+restores it. The initial saved view is captured after the first model is fitted.
 
 ## GitHub Pages deployment
 

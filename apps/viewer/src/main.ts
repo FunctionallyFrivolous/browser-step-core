@@ -48,10 +48,12 @@ fitButton.disabled = true;
 const saveViewButton = document.createElement("button");
 saveViewButton.type = "button";
 saveViewButton.textContent = "Save View";
+saveViewButton.disabled = true;
 
 const revertViewButton = document.createElement("button");
 revertViewButton.type = "button";
 revertViewButton.textContent = "Revert to Saved View";
+revertViewButton.disabled = true;
 
 const hideBodiesButton = document.createElement("button");
 hideBodiesButton.type = "button";
@@ -181,6 +183,7 @@ const commandManager = new CommandManager();
 const selection = new SelectionModel();
 const style = new StyleStateModel();
 const view = new ViewStateModel();
+let hasInitialSavedView = false;
 let selectionScope: SelectionScope = "object";
 const selectedEdgeIndices = new Set<number>();
 const edgeThicknessOverrides = new Map<number, number>();
@@ -223,7 +226,6 @@ view.subscribe((state) => {
   if (!updatingViewFromRenderer) renderer.setViewState(state);
 });
 renderer.setViewState(view.state);
-view.saveBookmark("saved-view");
 style.subscribe((state) => {
   renderer.setStyleState(state);
 });
@@ -405,6 +407,12 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     updateBodyVisibilityControl();
     renderer.renderMeshes(meshes, style.state);
     fitButton.disabled = false;
+    if (!hasInitialSavedView) {
+      view.saveBookmark("saved-view");
+      hasInitialSavedView = true;
+      saveViewButton.disabled = false;
+      revertViewButton.disabled = false;
+    }
     status.textContent =
       `${name} — ${session.bodyCount} bodies, ${session.faceCount} faces`;
   } catch (error) {

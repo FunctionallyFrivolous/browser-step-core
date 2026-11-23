@@ -63,6 +63,30 @@ test("restores shared camera views including orthographic zoom and clipping", ()
   assert.deepEqual(getCameraViewState(restored, target), view.state);
 });
 
+test("saves the initial camera view after fitting the first model", () => {
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 100000);
+  camera.position.set(1.8, 1.8, 2.4);
+  const target = new THREE.Vector3();
+  const view = new ViewStateModel(getCameraViewState(camera, target));
+  const bounds = new THREE.Box3(
+    new THREE.Vector3(-10, -5, -2),
+    new THREE.Vector3(10, 5, 2),
+  );
+  fitOrthographicCameraToBounds(camera, bounds, target, 1);
+  view.setState(getCameraViewState(camera, target));
+  view.saveBookmark("initial");
+  const fitted = view.state;
+
+  view.setState({
+    ...fitted,
+    position: [1.8, 1.8, 2.4],
+    verticalSpan: 2,
+  });
+  assert.equal(view.restoreBookmark("initial"), true);
+  assert.deepEqual(view.state, fitted);
+  assert.ok(view.state.verticalSpan > 2);
+});
+
 test("restores a perspective view with its position, target, scale, and clipping", () => {
   const camera = new THREE.PerspectiveCamera(20, 2, 0.2, 500);
   camera.position.set(6, 8, 12);
