@@ -380,16 +380,20 @@ function createLineSegmentsFromPolyline(positions: Float32Array): number[] {
   return segments;
 }
 
-function getTopologicalEdgeKey(edge: TopologicalEdge): string {
-  const coordinates = [0, edge.positions.length - 3].map((offset) =>
-    [
-      edge.positions[offset],
-      edge.positions[offset + 1],
-      edge.positions[offset + 2],
-    ].map((coordinate) => Math.round(coordinate * 100_000)).join(","),
-  );
-  coordinates.sort();
-  return coordinates.join(":");
+function getTopologicalEdgeKeys(edge: TopologicalEdge): string[] {
+  const keys: string[] = [];
+  for (let offset = 0; offset + 5 < edge.positions.length; offset += 3) {
+    const coordinates = [offset, offset + 3].map((pointOffset) =>
+      [
+        edge.positions[pointOffset],
+        edge.positions[pointOffset + 1],
+        edge.positions[pointOffset + 2],
+      ].map((coordinate) => Math.round(coordinate * 100_000)).join(","),
+    );
+    coordinates.sort();
+    keys.push(coordinates.join(":"));
+  }
+  return keys;
 }
 
 function updateEdgeVisibility(
@@ -500,7 +504,8 @@ export function createGeometryGroup(
       line.userData.edgeIndex = edge.edgeIndex;
       line.userData.faceIndices = edge.faceIndices;
       line.userData.bodyIndex = edge.bodyIndex;
-      line.userData.isSmoothEdge = smoothEdges.has(getTopologicalEdgeKey(edge));
+      line.userData.isSmoothEdge = getTopologicalEdgeKeys(edge)
+        .some((key) => smoothEdges.has(key));
       line.renderOrder = 0;
       updateEdgeVisibility(line, clampedEdgeThickness, showSmoothEdges);
       group.add(line);
