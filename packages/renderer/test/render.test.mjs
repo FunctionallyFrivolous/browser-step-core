@@ -365,7 +365,11 @@ test("applies opacity to selected faces or bodies and preserves overrides across
   assert.equal(faces[2].material.transparent, true);
   assert.equal(faces[2].material.depthWrite, false);
 
-  setGeometryGroupStyle(group, { faceColor: 0x123456, opacity: 0.5, visible: true });
+  setGeometryGroupStyle(group, {
+    faceColor: 0x123456,
+    opacity: 0.5,
+    visible: true,
+  });
   setGeometryGroupShading(group, "original");
   assert.deepEqual(opacities(), [1, 1, 0, 0.5]);
   assert.ok(getBoundaryLines(group).every((line) => line.material.opacity === 1));
@@ -375,6 +379,63 @@ test("applies opacity to selected faces or bodies and preserves overrides across
   setGeometryGroupOpacity(group, 0.5, new Set(selection.selectedFaces));
   setGeometryGroupStyle(group, { faceColor: 0xabcdef, opacity: 0.5, visible: true });
   assert.deepEqual(opacities(), [0.5, 0.5, 0.5, 0.5]);
+
+  disposeGroup(group);
+});
+
+test("shows true face colors for selected opacity changes until selection changes", () => {
+  const group = createGeometryGroup(
+    [4, 5, 6].map((faceIndex) => ({
+      faceIndex,
+      bodyIndex: faceIndex < 6 ? 1 : 2,
+      positions: new Float32Array([0, 0, faceIndex, 1, 0, faceIndex, 0, 1, faceIndex]),
+      indices: new Uint32Array([0, 1, 2]),
+    })),
+  );
+  const faces = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  const highlights = getSelectionHighlights(group);
+  const colors = () => faces.map((face) => face.material.color.getHex());
+  const selection = new SelectionModel();
+
+  setGeometryGroupStyle(group, { faceColor: 0x123456, opacity: 0.5, visible: true });
+  selection.toggleAll([4, 5]);
+  setGeometryGroupSelection(group, new Set(selection.selectedFaces), "object");
+  assert.deepEqual(colors(), [0xffc7c7, 0xffc7c7, 0x123456]);
+
+  setGeometryGroupOpacity(group, 0.25, new Set(selection.selectedFaces));
+  assert.deepEqual(colors(), [0x123456, 0x123456, 0x123456]);
+  assert.deepEqual(faces.map((face) => face.material.opacity), [0.25, 0.25, 0.5]);
+
+  setGeometryGroupSelection(group, new Set(selection.selectedFaces), "face");
+  assert.deepEqual(colors(), [0xffc7c7, 0xffc7c7, 0x123456]);
+  assert.ok(
+    highlights.every((highlight) => highlight.material.color.getHex() === 0xff0000),
+  );
+  assert.ok(
+    highlights
+      .filter((highlight) => [4, 5].includes(highlight.userData.faceIndex))
+      .every((highlight) => highlight.visible),
+  );
+
+  selection.toggle(6);
+  setGeometryGroupSelection(group, new Set(selection.selectedFaces), "face");
+  assert.deepEqual(colors(), [0xffc7c7, 0xffc7c7, 0xffc7c7]);
+
+  selection.toggle(4);
+  setGeometryGroupSelection(group, new Set(selection.selectedFaces), "face");
+  assert.deepEqual(colors(), [0x123456, 0xffc7c7, 0xffc7c7]);
+  assert.ok(
+    highlights
+      .filter((highlight) => highlight.userData.faceIndex === 4)
+      .every((highlight) => !highlight.visible),
+  );
+  assert.ok(
+    highlights
+      .filter((highlight) => [5, 6].includes(highlight.userData.faceIndex))
+      .every((highlight) => highlight.visible),
+  );
 
   disposeGroup(group);
 });
