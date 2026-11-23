@@ -4,14 +4,17 @@ import * as THREE from "three";
 import {
   createGeometryGroup,
   createCameraFromViewState,
+  getEdgeIndicesForFaces,
   fitCameraToBounds,
   fitOrthographicCameraToBounds,
   getCameraViewState,
   PointerGestureTracker,
   raycastFace,
   raycastFaceIndex,
+  raycastEdge,
   renderSceneWithDepthPrepass,
   setGeometryGroupEdgeThickness,
+  setGeometryGroupEdgeSelection,
   setGeometryGroupFaceColor,
   setGeometryGroupHiddenBodies,
   setGeometryGroupOpacity,
@@ -220,6 +223,109 @@ test("ignores nearby boundary lines when picking faces", () => {
   assert.equal(raycastFaceIndex(raycaster, group), 4);
   group.visible = false;
   assert.equal(raycastFaceIndex(raycaster, group), undefined);
+
+  disposeGroup(group);
+});
+
+test("picks and highlights BREP edges and edits selected-edge thickness", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [
+        { edgeIndex: 9, positions: new Float32Array([0, 0, 0, 1, 0, 0]) },
+        { edgeIndex: 10, positions: new Float32Array([0, 0, 0, 0, 1, 0]) },
+      ],
+    },
+  ]);
+  const faceRay = new THREE.Raycaster(
+    new THREE.Vector3(0.25, 0.1, 2),
+    new THREE.Vector3(0, 0, -1),
+  );
+  const pickedEdge = raycastEdge(
+    faceRay,
+    group,
+    4,
+    new THREE.Vector3(0.25, 0.1, 0),
+  );
+  assert.equal(pickedEdge.edgeIndex, 9);
+  assert.equal(pickedEdge.faceIndex, 4);
+
+  const edgeRay = new THREE.Raycaster(
+    new THREE.Vector3(0.5, 0.05, 2),
+    new THREE.Vector3(0, 0, -1),
+  );
+  assert.equal(raycastEdge(edgeRay, group).edgeIndex, 9);
+
+  setGeometryGroupEdgeSelection(group, [9]);
+  let edgeHighlight = group.children.find(
+    (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
+  );
+  assert.equal(edgeHighlight.visible, true);
+  setGeometryGroupEdgeThickness(group, 4, [9]);
+  edgeHighlight = group.children.find(
+    (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
+  );
+  assert.equal(edgeHighlight.material.linewidth, 4);
+  assert.equal(edgeHighlight.visible, true);
+
+  setGeometryGroupEdgeSelection(group, []);
+  edgeHighlight = group.children.find(
+    (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
+  );
+  assert.equal(edgeHighlight, undefined);
+  setGeometryGroupHiddenBodies(group, new Set([0]));
+  assert.equal(raycastEdge(edgeRay, group), undefined);
+
+  disposeGroup(group);
+});
+
+test("applies thickness only to requested BREP edges and globally when unscoped", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [
+        { edgeIndex: 9, positions: new Float32Array([0, 0, 0, 1, 0, 0]) },
+        { edgeIndex: 10, positions: new Float32Array([0, 0, 0, 0, 1, 0]) },
+      ],
+    },
+    {
+      faceIndex: 5,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0, 1]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [
+        { edgeIndex: 9, positions: new Float32Array([0, 0, 0, 1, 0, 0]) },
+        { edgeIndex: 11, positions: new Float32Array([0, 0, 0, 0, 0, 1]) },
+      ],
+    },
+  ]);
+  const edgeLine = (edgeIndex) => group.children.find(
+    (child) =>
+      child.userData.isTopologicalEdgeLine &&
+      child.userData.edgeIndex === edgeIndex,
+  );
+
+  assert.equal(edgeLine(9).material.linewidth, 1);
+  assert.equal(edgeLine(10).material.linewidth, 1);
+  assert.equal(edgeLine(11).material.linewidth, 1);
+  assert.deepEqual(getEdgeIndicesForFaces(group, [4]), [9, 10]);
+  assert.deepEqual(getEdgeIndicesForFaces(group, [4, 5]), [9, 10, 11]);
+
+  setGeometryGroupEdgeThickness(group, 4, [9, 10]);
+  assert.equal(edgeLine(9).material.linewidth, 4);
+  assert.equal(edgeLine(10).material.linewidth, 4);
+  assert.equal(edgeLine(11).material.linewidth, 1);
+
+  setGeometryGroupEdgeThickness(group, 2);
+  assert.equal(edgeLine(9).material.linewidth, 2);
+  assert.equal(edgeLine(10).material.linewidth, 2);
+  assert.equal(edgeLine(11).material.linewidth, 2);
 
   disposeGroup(group);
 });

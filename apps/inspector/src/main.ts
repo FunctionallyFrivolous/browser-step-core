@@ -51,15 +51,15 @@ const selectionScopeControl = document.createElement("fieldset");
 const selectionScopeLegend = document.createElement("legend");
 selectionScopeLegend.textContent = "Selection Scope";
 selectionScopeControl.append(selectionScopeLegend);
-for (const scope of ["object", "face"] as const) {
+for (const scope of ["object", "face", "edge"] as const) {
   const label = document.createElement("label");
   const input = document.createElement("input");
   input.type = "radio";
   input.name = "selection-scope";
   input.value = scope;
   input.checked = scope === "face";
-  input.setAttribute("aria-label", scope === "object" ? "Object" : "Face");
-  label.append(input, scope === "object" ? "Object" : "Face");
+  input.setAttribute("aria-label", scope === "object" ? "Object" : scope === "face" ? "Face" : "Edge");
+  label.append(input, scope === "object" ? "Object" : scope === "face" ? "Face" : "Edge");
   selectionScopeControl.append(label);
 }
 
@@ -81,8 +81,22 @@ const session = new ModelSession();
 const selection = new SelectionModel();
 const style = new StyleStateModel();
 let selectionScope: SelectionScope = "face";
+const selectedEdgeIndices = new Set<number>();
 let bodyFaces = new Map<number, number[]>();
-const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex) => {
+const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) => {
+  if (selectionScope === "edge") {
+    if (edgeIndex === undefined) {
+      selectedEdgeIndices.clear();
+    } else if (selectedEdgeIndices.has(edgeIndex)) {
+      selectedEdgeIndices.delete(edgeIndex);
+    } else {
+      selectedEdgeIndices.add(edgeIndex);
+    }
+    renderer.setSelectedEdges([...selectedEdgeIndices]);
+    updateSelectionStatus();
+    return;
+  }
+
   if (faceIndex === undefined) {
     selection.clear();
   } else if (selectionScope === "object") {
@@ -93,16 +107,30 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex) => {
 });
 selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
-  const count = selectedFaceIndices.length;
-  selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
+  updateSelectionStatus();
 });
+
+function updateSelectionStatus(): void {
+  if (selectionScope === "edge") {
+    const count = selectedEdgeIndices.size;
+    selectionStatus.textContent = `${count} edge${count === 1 ? "" : "s"} selected`;
+  } else {
+    const count = selection.selectedFaces.length;
+    selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
+  }
+}
 
 selectionScopeControl.addEventListener("change", (event) => {
   const input = event.target;
   if (!(input instanceof HTMLInputElement) || !input.checked) return;
-  selectionScope = input.value === "object" ? "object" : "face";
+  selectionScope = input.value === "object"
+    ? "object"
+    : input.value === "edge" ? "edge" : "face";
+  selectedEdgeIndices.clear();
+  renderer.setSelectedEdges([]);
   selection.clear();
   renderer.setSelectionScope(selectionScope);
+  updateSelectionStatus();
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
@@ -130,6 +158,8 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     await session.load(await readData());
     const meshes = session.tessellation;
     selection.clear();
+    selectedEdgeIndices.clear();
+    renderer.setSelectedEdges([]);
     bodyFaces = new Map();
     for (const mesh of meshes) {
       const bodyIndex = mesh.bodyIndex ?? mesh.faceIndex;
