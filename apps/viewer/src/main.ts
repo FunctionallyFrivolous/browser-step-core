@@ -6,6 +6,7 @@ import {
   ViewStateModel,
 } from "@browser-step/core";
 import {
+  alignViewToNormal,
   createStepRenderer,
   type CameraProjection,
   type OrbitMode,
@@ -44,6 +45,12 @@ const fitButton = document.createElement("button");
 fitButton.type = "button";
 fitButton.textContent = "Fit model to view";
 fitButton.disabled = true;
+
+const snapViewButton = document.createElement("button");
+snapViewButton.type = "button";
+snapViewButton.textContent = "Snap View";
+snapViewButton.setAttribute("aria-pressed", "false");
+snapViewButton.disabled = true;
 
 const saveViewButton = document.createElement("button");
 saveViewButton.type = "button";
@@ -171,6 +178,7 @@ controls.append(
   orbitModeControl,
   lightingControl,
   fitButton,
+  snapViewButton,
   saveViewButton,
   revertViewButton,
   smoothEdgesControl,
@@ -191,7 +199,18 @@ let globalEdgeThickness = Number(edgeThicknessSlider.value);
 let bodyFaces = new Map<number, number[]>();
 let hiddenBodies = new Set<number>();
 let updatingViewFromRenderer = false;
+let snappingView = false;
+let planarNormals = new Map<number, [number, number, number]>();
 const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) => {
+  if (snappingView) {
+    const normal = faceIndex === undefined ? undefined : planarNormals.get(faceIndex);
+    if (normal) {
+      view.setState(alignViewToNormal(view.state, normal));
+      setSnapViewMode(false);
+    }
+    return;
+  }
+
   if (selectionScope === "edge") {
     if (edgeIndex === undefined) {
       selectedEdgeIndices.clear();
@@ -221,6 +240,14 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) 
     updatingViewFromRenderer = false;
   }
 });
+
+function setSnapViewMode(enabled: boolean): void {
+  snappingView = enabled;
+  renderer.setFacePickingOnly(enabled);
+  snapViewButton.setAttribute("aria-pressed", String(enabled));
+  snapViewButton.textContent = enabled ? "Cancel Snap View (select a planar face)" : "Snap View";
+}
+
 view.subscribe((state) => {
   projectionSelect.value = state.projection;
   if (!updatingViewFromRenderer) renderer.setViewState(state);
@@ -318,6 +345,7 @@ selectionScopeControl.addEventListener("change", (event) => {
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
+snapViewButton.addEventListener("click", () => setSnapViewMode(!snappingView));
 saveViewButton.addEventListener("click", () => view.saveBookmark("saved-view"));
 revertViewButton.addEventListener("click", () => view.restoreBookmark("saved-view"));
 projectionSelect.addEventListener("change", () => {
@@ -392,6 +420,10 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
   try {
     await session.load(await readData());
     const meshes = session.tessellation;
+    setSnapViewMode(false);
+    planarNormals = new Map(
+      meshes.flatMap((mesh) => mesh.planarNormal ? [[mesh.faceIndex, mesh.planarNormal] as const] : []),
+    );
     selection.clear();
     selectedEdgeIndices.clear();
     edgeThicknessOverrides.clear();
@@ -407,6 +439,7 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     updateBodyVisibilityControl();
     renderer.renderMeshes(meshes, style.state);
     fitButton.disabled = false;
+    snapViewButton.disabled = false;
     if (!hasInitialSavedView) {
       view.saveBookmark("saved-view");
       hasInitialSavedView = true;

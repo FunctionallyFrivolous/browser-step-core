@@ -18,6 +18,10 @@ test("loads a STEP solid and reports body and face counts", async () => {
   assert.ok(meshes.length > 0);
   assert.ok(meshes.every((mesh) => mesh.bodyIndex === 0));
   assert.ok(meshes.every((mesh) => mesh.positions.length > 0 && mesh.indices.length > 0));
+  assert.deepEqual(
+    meshes.map((mesh) => mesh.planarNormal.map((value) => Math.round(value)).join(",")).sort(),
+    ["-1,0,0", "0,-1,0", "0,0,-1", "0,0,1", "0,1,0", "1,0,0"],
+  );
   assert.ok(
     meshes.every((mesh) => [...mesh.indices].every((index) => index < mesh.positions.length / 3)),
   );
@@ -37,6 +41,30 @@ test("loads a STEP solid and reports body and face counts", async () => {
   await assert.rejects(kernel.loadStep(new Uint8Array([0, 1, 2])));
   assert.equal(kernel.getBodyCount(), 1);
   assert.equal(kernel.getFaceCount(), 6);
+});
+
+test("classifies BREP planes and curved faces with oriented world-space normals", async () => {
+  const data = await readFile(
+    new URL("../../samples/src/models/GDT_Hole_Str.step", import.meta.url),
+  );
+  const kernel = new LibcascadeKernel();
+  await kernel.loadStep(data);
+  const meshes = kernel.getTessellation();
+  const planes = meshes.filter((mesh) => mesh.planarNormal);
+  assert.ok(planes.length > 0);
+  assert.ok(meshes.some((mesh) => !mesh.planarNormal));
+  for (const { positions, indices, planarNormal: normal } of planes) {
+    assert.ok(Math.abs(Math.hypot(...normal) - 1) < 1e-10);
+    const [i, j, k] = indices;
+    const a = [0, 1, 2].map((n) => positions[j * 3 + n] - positions[i * 3 + n]);
+    const b = [0, 1, 2].map((n) => positions[k * 3 + n] - positions[i * 3 + n]);
+    const cross = [
+      a[1] * b[2] - a[2] * b[1],
+      a[2] * b[0] - a[0] * b[2],
+      a[0] * b[1] - a[1] * b[0],
+    ];
+    assert.ok(cross.reduce((sum, value, n) => sum + value * normal[n], 0) > 0);
+  }
 });
 
 test("assigns each face to its containing solid", async () => {

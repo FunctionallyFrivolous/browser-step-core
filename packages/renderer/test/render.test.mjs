@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as THREE from "three";
 import {
+  alignViewToNormal,
   createGeometryGroup,
   createCameraControls,
   createCameraFromViewState,
@@ -30,6 +31,39 @@ import { TrackballControls } from "three/addons/controls/TrackballControls.js";
 import { BodySilhouettePass } from "../src/body-silhouette.ts";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { SelectionModel, ViewStateModel } from "../../core/src/index.ts";
+
+test("aligns a view to either side of a plane without changing its framing", () => {
+  for (const projection of ["orthographic", "perspective"]) {
+    for (const normal of [[0, 1, 0], [0, -1, 0], [2, 0, 0], [1, 2, 3]]) {
+      const state = {
+        projection, position: [4, 5, 6], target: [1, 2, 3], up: [0, 1, 0],
+        verticalSpan: 8, near: 0.1, far: 100,
+      };
+      const aligned = alignViewToNormal(state, normal);
+      const offset = new THREE.Vector3().fromArray(aligned.position)
+        .sub(new THREE.Vector3().fromArray(aligned.target));
+      const direction = new THREE.Vector3().fromArray(normal).normalize();
+      const up = new THREE.Vector3().fromArray(aligned.up);
+      assert.ok(Math.abs(Math.abs(offset.clone().normalize().dot(direction)) - 1) < 1e-10);
+      assert.ok(offset.dot(new THREE.Vector3(3, 3, 3)) >= -1e-10);
+      assert.ok(Math.abs(offset.length() - Math.sqrt(27)) < 1e-10);
+      assert.ok(Math.abs(up.length() - 1) < 1e-10);
+      assert.ok(Math.abs(up.dot(direction)) < 1e-10);
+      assert.deepEqual(
+        { ...aligned, position: state.position, up: state.up },
+        state,
+      );
+      const camera = createCameraFromViewState(aligned, 1);
+      for (const mode of ["constrained", "free"]) {
+        const controls = createCameraControls(camera, null, mode);
+        controls.target.fromArray(aligned.target);
+        controls.update();
+        assert.ok(camera.position.distanceTo(new THREE.Vector3().fromArray(aligned.position)) < 1e-8);
+      }
+    }
+  }
+  assert.throws(() => alignViewToNormal(new ViewStateModel().state, [0, 0, 0]), /Invalid plane normal/);
+});
 
 test("creates constrained and free orbit camera controls", () => {
   const camera = new THREE.PerspectiveCamera();
