@@ -42,6 +42,40 @@ test("creates constrained and free orbit camera controls", () => {
   assert.equal(free.staticMoving, false);
 });
 
+test("free orbit preserves the view and rotates in both directions after constrained orbit", () => {
+  for (const offset of [
+    new THREE.Vector3(0, 10, 0),
+    new THREE.Vector3(0, -10, 0),
+    new THREE.Vector3(4, 6, 8),
+  ]) {
+    for (const [x, y] of [[100, 0], [0, 100]]) {
+      const target = new THREE.Vector3(2, 3, 4);
+      const camera = new THREE.PerspectiveCamera();
+      camera.position.copy(target).add(offset);
+      const constrained = createCameraControls(camera, null, "constrained");
+      constrained.target.copy(target);
+      camera.position.copy(target).add(offset);
+      constrained.update();
+      const position = camera.position.clone();
+      const orientation = camera.quaternion.clone();
+
+      const free = createCameraControls(camera, null, "free");
+      free.target.copy(target);
+      free.update();
+      assert.ok(camera.position.distanceTo(position) < 1e-10);
+      assert.ok(camera.quaternion.angleTo(orientation) < 1e-7);
+      assert.ok(Math.abs(camera.up.dot(camera.position.clone().sub(target).normalize())) < 1e-10);
+
+      Object.assign(free.screen, { left: 0, top: 0, width: 500, height: 500 });
+      free._onMouseDown({ button: 0, pageX: 250, pageY: 250 });
+      free._onMouseMove({ pageX: 250 + x, pageY: 250 + y });
+      free.update();
+      assert.ok(camera.position.distanceTo(position) > 3);
+      assert.ok(Math.abs(camera.position.distanceTo(target) - position.distanceTo(target)) < 1e-10);
+    }
+  }
+});
+
 test("restores shared camera views including orthographic zoom and clipping", () => {
   const camera = new THREE.OrthographicCamera(-4, 4, 2, -2, 0.1, 200);
   camera.position.set(6, 8, 12);
