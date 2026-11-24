@@ -32,7 +32,10 @@ export function createCameraControls(
   domElement: HTMLElement | null,
   mode: OrbitMode,
 ): CameraControls {
-  if (mode === "free") return new TrackballControls(camera, domElement);
+  if (mode === "free") {
+    camera.up.set(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+    return new TrackballControls(camera, domElement);
+  }
 
   const controls = new OrbitControls(camera, domElement);
   controls.enableDamping = true;
