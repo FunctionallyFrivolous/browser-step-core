@@ -462,6 +462,10 @@ function updateEdgeVisibility(
     (!isSelectedHighlight || object.userData.isSelected === true);
 }
 
+function getSelectionHighlightThickness(edgeThickness: number): number {
+  return Math.min(Math.max(1, edgeThickness * 1.5), 3);
+}
+
 export function createGeometryGroup(
   meshes: TriangleMesh[],
   shadingMode: ShadingMode = "flat",
@@ -763,7 +767,7 @@ export function setGeometryGroupEdgeThickness(
     const material = object.material as LineMaterial;
     const isSelectedHighlight = object.userData.isSelectionHighlight === true;
     const newLineWidth = isSelectedHighlight
-      ? Math.min(Math.max(1, clampedThickness * 1.5), 3)
+      ? getSelectionHighlightThickness(clampedThickness)
       : clampedThickness;
     material.linewidth = newLineWidth;
     updateEdgeVisibility(object, newLineWidth, showSmoothEdges);
@@ -777,10 +781,6 @@ export function setGeometryGroupEdgeSelection(
   const selectedEdges = new Set(edgeIndices);
   const overrides = group.userData.edgeThicknessOverrides as Map<number, number>;
   const topologicalEdges = group.userData.topologicalEdges as Map<number, TopologicalEdge>;
-  const defaultThickness = Math.min(
-    Math.max(1, (group.userData.edgeThickness as number) * 1.5),
-    3,
-  );
   group.userData.selectedEdgeIndices = selectedEdges;
   for (const object of [...group.children]) {
     if (!object.userData.isEdgeSelectionHighlight) continue;
@@ -800,7 +800,9 @@ export function setGeometryGroupEdgeSelection(
   for (const edgeIndex of selectedEdges) {
     const edge = topologicalEdges.get(edgeIndex);
     if (!edge || edge.positions.length < 6) continue;
-    const thickness = overrides.get(edgeIndex) ?? defaultThickness;
+    const thickness = getSelectionHighlightThickness(
+      overrides.get(edgeIndex) ?? (group.userData.edgeThickness as number),
+    );
     const key = `${edge.bodyIndex}:${thickness}`;
     const highlight = highlights.get(key) ?? {
       bodyIndex: edge.bodyIndex,
