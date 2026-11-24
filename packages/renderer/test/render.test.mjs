@@ -384,18 +384,37 @@ test("picks and highlights BREP edges and edits selected-edge thickness", () => 
     (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
   );
   assert.equal(edgeHighlight.visible, true);
-  setGeometryGroupEdgeThickness(group, 4, [9]);
-  edgeHighlight = group.children.find(
-    (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
-  );
-  assert.equal(edgeHighlight.material.linewidth, 4);
-  assert.equal(edgeHighlight.visible, true);
+  for (const [thickness, expectedHighlight] of [[0, 1], [0.5, 1], [1, 1.5], [1.5, 2.25], [4, 3], [5, 3]]) {
+    setGeometryGroupEdgeThickness(group, thickness, [9]);
+    edgeHighlight = group.children.find(
+      (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
+    );
+    const edgeLine = group.children.find(
+      (child) => child.userData.isTopologicalEdgeLine && child.userData.edgeIndex === 9,
+    );
+    assert.equal(edgeLine.material.linewidth, thickness);
+    assert.equal(edgeHighlight.material.linewidth, expectedHighlight);
+    assert.equal(edgeHighlight.visible, true);
+  }
 
   setGeometryGroupEdgeSelection(group, []);
   edgeHighlight = group.children.find(
     (child) => child.userData.isEdgeSelectionHighlight && child.userData.edgeIndex === 9,
   );
   assert.equal(edgeHighlight, undefined);
+  setGeometryGroupEdgeSelection(group, [9, 10]);
+  const edgeHighlights = group.children.filter((child) => child.userData.isEdgeSelectionHighlight);
+  assert.equal(edgeHighlights.length, 2);
+  assert.equal(edgeHighlights.find((child) => child.userData.edgeIndex === 9).material.linewidth, 3);
+  assert.equal(edgeHighlights.find((child) => child.userData.edgeIndex === 10).material.linewidth, 1.5);
+  setGeometryGroupEdgeThickness(group, 0.5);
+  const globalHighlight = group.children.find((child) => child.userData.isEdgeSelectionHighlight);
+  assert.equal(globalHighlight.material.linewidth, 1);
+  setGeometryGroupEdgeSelection(group, [9, 10]);
+  const reselectedHighlights = group.children.filter((child) => child.userData.isEdgeSelectionHighlight);
+  assert.equal(reselectedHighlights.length, 1);
+  assert.deepEqual(reselectedHighlights[0].userData.edgeIndices, [9, 10]);
+  assert.equal(reselectedHighlights[0].material.linewidth, 1);
   setGeometryGroupHiddenBodies(group, new Set([0]));
   assert.equal(raycastEdge(edgeRay, group), undefined);
 
