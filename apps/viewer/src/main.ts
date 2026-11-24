@@ -213,7 +213,8 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) 
 
   if (selectionScope === "edge") {
     if (edgeIndex === undefined) {
-      selectedEdgeIndices.clear();
+      clearSelection();
+      return;
     } else if (selectedEdgeIndices.has(edgeIndex)) {
       selectedEdgeIndices.delete(edgeIndex);
     } else {
@@ -226,7 +227,7 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) 
   }
 
   if (faceIndex === undefined) {
-    selection.clear();
+    clearSelection();
   } else if (selectionScope === "object") {
     selection.toggleAll(bodyFaces.get(bodyIndex ?? faceIndex) ?? [faceIndex]);
   } else {
@@ -270,13 +271,28 @@ selection.subscribe((selectedFaceIndices) => {
 });
 
 function updateSelectionStatus(): void {
+  const faceCount = selection.selectedFaces.length;
+  const edgeCount = selectedEdgeIndices.size;
+  if ((selectionScope === "edge" && faceCount > 0) ||
+      (selectionScope !== "edge" && edgeCount > 0)) {
+    selectionStatus.textContent = `${faceCount} face${faceCount === 1 ? "" : "s"}, ${edgeCount} edge${edgeCount === 1 ? "" : "s"} selected`;
+    return;
+  }
   if (selectionScope === "edge") {
-    const count = selectedEdgeIndices.size;
+    const count = edgeCount;
     selectionStatus.textContent = `${count} edge${count === 1 ? "" : "s"} selected`;
   } else {
-    const count = selection.selectedFaces.length;
+    const count = faceCount;
     selectionStatus.textContent = `${count} face${count === 1 ? "" : "s"} selected`;
   }
+}
+
+function clearSelection(): void {
+  selectedEdgeIndices.clear();
+  renderer.setSelectedEdges([]);
+  selection.clear();
+  updateSelectionStatus();
+  updateEdgeThicknessControl();
 }
 
 function updateEdgeThicknessControl(): void {
@@ -336,9 +352,6 @@ selectionScopeControl.addEventListener("change", (event) => {
   selectionScope = input.value === "object"
     ? "object"
     : input.value === "edge" ? "edge" : "face";
-  selectedEdgeIndices.clear();
-  renderer.setSelectedEdges([]);
-  selection.clear();
   renderer.setSelectionScope(selectionScope);
   updateSelectionStatus();
   updateEdgeThicknessControl();
@@ -428,6 +441,7 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     selectedEdgeIndices.clear();
     edgeThicknessOverrides.clear();
     renderer.setSelectedEdges([]);
+    updateSelectionStatus();
     bodyFaces = new Map();
     for (const mesh of meshes) {
       const bodyIndex = mesh.bodyIndex ?? mesh.faceIndex;

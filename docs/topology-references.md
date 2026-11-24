@@ -16,9 +16,10 @@ existing individual-face selection behavior; object scope selects all faces
 with the hit body's index and outlines the screen-space projection of its
 tessellated faces. The outline includes projected holes and disconnected
 islands, but not internal face or feature edges; it updates with the camera.
-Both
-applications clear selection when replacing the geometry after a successful
-load or changing selection scope. `ModelSession` increments a numeric revision
+Both applications retain face and edge selections when changing scope and
+clear them when replacing the geometry after a successful load. Body selections
+are stored as their constituent faces, so individual faces can be toggled after
+switching to face scope. `ModelSession` increments a numeric revision
 after a successful STEP load, but that revision is not currently attached to
 face picks or selection.
 

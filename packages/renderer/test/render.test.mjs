@@ -1058,6 +1058,60 @@ test("object scope selects complete bodies for the silhouette pass", () => {
   disposeGroup(group);
 });
 
+test("preserves selection highlights across body, face, and edge scopes", () => {
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [{ edgeIndex: 9, positions: new Float32Array([0, 0, 0, 1, 0, 0]) }],
+    },
+    {
+      faceIndex: 5,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 1, 1, 0, 1, 0, 1, 1]),
+      indices: new Uint32Array([0, 1, 2]),
+    },
+  ]);
+  const selection = new SelectionModel();
+  let scope = "object";
+  selection.subscribe((faces) => setGeometryGroupSelection(group, new Set(faces), scope));
+  const meshes = group.children.filter(
+    (child) => child instanceof THREE.Mesh && !child.userData.isEdgeLine,
+  );
+  const highlights = getSelectionHighlights(group);
+
+  selection.toggleAll([4, 5]);
+  assert.deepEqual([...group.userData.selectedBodies], [0]);
+  scope = "face";
+  setGeometryGroupSelection(group, new Set(selection.selectedFaces), scope);
+  assert.ok(meshes.every((mesh) => mesh.material.color.getHex() === 0xffc7c7));
+  assert.ok(highlights.every((highlight) => highlight.visible));
+  selection.toggle(4);
+  assert.deepEqual(selection.selectedFaces, [5]);
+  assert.notEqual(meshes[0].material.color.getHex(), 0xffc7c7);
+  assert.equal(meshes[1].material.color.getHex(), 0xffc7c7);
+  assert.equal(highlights[0].visible, false);
+  assert.equal(highlights[1].visible, true);
+
+  scope = "edge";
+  setGeometryGroupSelection(group, new Set(selection.selectedFaces), scope);
+  setGeometryGroupEdgeSelection(group, [9]);
+  scope = "object";
+  setGeometryGroupSelection(group, new Set(selection.selectedFaces), scope);
+  assert.equal(meshes[1].material.color.getHex(), 0xffc7c7);
+  assert.ok(group.children.some((child) => child.userData.isEdgeSelectionHighlight && child.visible));
+  assert.equal(group.userData.selectedBodies.size, 0);
+  selection.toggleAll([4, 5]);
+  assert.deepEqual([...group.userData.selectedBodies], [0]);
+  selection.toggleAll([4, 5]);
+  assert.deepEqual(selection.selectedFaces, []);
+  assert.ok(group.children.some((child) => child.userData.isEdgeSelectionHighlight && child.visible));
+
+  disposeGroup(group);
+});
+
 test("renders a separate projected mask for each selected body on every camera change", () => {
   const vertices = [
     [0, 0, 0],
