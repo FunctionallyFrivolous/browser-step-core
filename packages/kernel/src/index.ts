@@ -12,6 +12,7 @@ export interface TriangleMesh {
   faceIndex: number;
   bodyIndex: number;
   edges: EdgePolyline[];
+  planarNormal?: [number, number, number];
 }
 
 export interface EdgePolyline {
@@ -248,6 +249,22 @@ export class LibcascadeKernel implements CadKernel {
                   }
 
                   if (indices.length > 0) {
+                    const surface = new oc.BRepAdaptor_Surface(face);
+                    let planarNormal: [number, number, number] | undefined;
+                    try {
+                      if (surface.GetType() === oc.GeomAbs_SurfaceType.GeomAbs_Plane) {
+                        const plane = surface.Plane();
+                        try {
+                          const { theA, theB, theC } = plane.Coefficients();
+                          const sign = face.Orientation() === oc.TopAbs_Orientation.TopAbs_REVERSED ? -1 : 1;
+                          planarNormal = [sign * theA, sign * theB, sign * theC];
+                        } finally {
+                          plane.delete();
+                        }
+                      }
+                    } finally {
+                      surface.delete();
+                    }
                     meshes.push({
                       positions: new Float32Array(positions),
                       indices: new Uint32Array(indices),
@@ -257,6 +274,7 @@ export class LibcascadeKernel implements CadKernel {
                         edgeIndex,
                         positions: edgePositions,
                       })),
+                      planarNormal,
                     });
                   }
                 }

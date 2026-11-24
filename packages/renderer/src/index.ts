@@ -77,6 +77,38 @@ export function getCameraViewState(
   };
 }
 
+export function alignViewToNormal(
+  state: ViewState,
+  normal: readonly [number, number, number],
+): ViewState {
+  const direction = new THREE.Vector3().fromArray(normal);
+  if (!normal.every(Number.isFinite) || direction.lengthSq() < 1e-20) {
+    throw new Error("Invalid plane normal.");
+  }
+  direction.normalize();
+  const offset = new THREE.Vector3().fromArray(state.position)
+    .sub(new THREE.Vector3().fromArray(state.target));
+  if (direction.dot(offset) < 0) direction.negate();
+
+  const up = new THREE.Vector3().fromArray(state.up ?? [0, 1, 0]);
+  up.addScaledVector(direction, -up.dot(direction));
+  if (up.lengthSq() < 1e-12) {
+    const fallback = Math.abs(direction.y) < 0.9
+      ? new THREE.Vector3(0, 1, 0)
+      : new THREE.Vector3(1, 0, 0);
+    up.copy(fallback).addScaledVector(direction, -fallback.dot(direction));
+  }
+  up.normalize();
+
+  return {
+    ...state,
+    position: new THREE.Vector3().fromArray(state.target)
+      .addScaledVector(direction, offset.length()).toArray(),
+    target: [...state.target],
+    up: up.toArray(),
+  };
+}
+
 export function createCameraFromViewState(
   state: ViewState,
   aspect: number,
@@ -1127,6 +1159,7 @@ export function createStepRenderer(
   setSelectedEdges(edgeIndices: readonly number[]): void;
   getEdgeIndicesForFaces(faceIndices: readonly number[]): number[];
   setSelectionScope(scope: SelectionScope): void;
+  setFacePickingOnly(enabled: boolean): void;
   setHiddenBodies(bodyIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
   setFaceColor(color: number, faceIndices: readonly number[]): void;
@@ -1361,6 +1394,11 @@ export function createStepRenderer(
     }
   };
 
+  let facePickingOnly = false;
+  const setFacePickingOnly = (enabled: boolean) => {
+    facePickingOnly = enabled;
+  };
+
   const setHiddenBodies = (bodyIndices: readonly number[]) => {
     if (geometryGroup) {
       setGeometryGroupHiddenBodies(geometryGroup, new Set(bodyIndices));
@@ -1378,7 +1416,7 @@ export function createStepRenderer(
     raycaster.setFromCamera(pointer, camera);
 
     const faceHit = raycastFaceIntersection(raycaster, geometryGroup);
-    if (selectionScope === "edge") {
+    if (selectionScope === "edge" && !facePickingOnly) {
       const faceIndex = faceHit?.object.userData.faceIndex as number | undefined;
       const pickedEdge = faceHit
         ? raycastEdge(
@@ -1471,6 +1509,7 @@ export function createStepRenderer(
     setSelectedEdges,
     getEdgeIndicesForFaces: getSelectedEdgeIndicesForFaces,
     setSelectionScope,
+    setFacePickingOnly,
     setHiddenBodies,
     fitToView,
     setProjection,

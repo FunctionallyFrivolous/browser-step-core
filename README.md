@@ -25,6 +25,8 @@ deleted as named in-memory bookmarks. Bookmarks are not persisted. The viewer
 synchronizes this state with camera navigation, projection changes, and fitting.
 Its **Save View** button replaces the saved view, and **Revert to Saved View**
 restores it. The initial saved view is captured after the first model is fitted.
+Use **Snap View** and select a planar face to align the camera with that face.
+Non-planar faces leave the tool active; press the button again to cancel.
 
 ## GitHub Pages deployment
 
