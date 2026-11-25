@@ -15,6 +15,7 @@ import {
   raycastFaceIndex,
   raycastEdge,
   renderSceneWithDepthPrepass,
+  setGeometryGroupEdgeColor,
   setGeometryGroupEdgeThickness,
   setGeometryGroupEdgeSelection,
   setGeometryGroupFaceColor,
@@ -768,6 +769,70 @@ test("colors selected faces or bodies and colors every face when selection is em
   setGeometryGroupFaceColor(group, 0x9caec2, new Set());
   setGeometryGroupHiddenBodies(group, new Set());
   assert.deepEqual(colors(), [0x9caec2, 0x9caec2, 0x9caec2, 0x9caec2]);
+  disposeGroup(group);
+});
+
+test("colors selected edges, faces and bodies, or edges on visible bodies", () => {
+  const edge = (edgeIndex, z) => ({
+    edgeIndex,
+    positions: new Float32Array([0, 0, z, 1, 0, z]),
+  });
+  const group = createGeometryGroup([
+    { faceIndex: 0, bodyIndex: 0, edges: [edge(0, 0), edge(1, 1)] },
+    { faceIndex: 1, bodyIndex: 0, edges: [edge(1, 1), edge(2, 2)] },
+    { faceIndex: 2, bodyIndex: 1, edges: [edge(3, 3)] },
+  ].map((mesh) => ({
+    ...mesh,
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    indices: new Uint32Array([0, 1, 2]),
+  })));
+  const lines = group.children.filter((child) => child.userData.isTopologicalEdgeLine);
+  const colors = () => lines.map((line) => line.material.color.getHex());
+
+  setGeometryGroupEdgeSelection(group, [0]);
+  setGeometryGroupEdgeColor(group, 0x123456, [], [0]);
+  assert.deepEqual(colors(), [0x123456, 0, 0, 0]);
+  assert.ok(group.children.filter((child) => child.userData.isSelectionHighlight)
+    .every((highlight) => highlight.material.color.getHex() === 0xff0000));
+  setGeometryGroupEdgeSelection(group, []);
+  setGeometryGroupEdgeColor(group, 0xabcdef, [1]);
+  assert.deepEqual(colors(), [0x123456, 0xabcdef, 0xabcdef, 0]);
+  setGeometryGroupEdgeColor(group, 0x654321, [0, 1]);
+  assert.deepEqual(colors(), [0x654321, 0x654321, 0x654321, 0]);
+  setGeometryGroupEdgeColor(group, 0x445566, [0], [3]);
+  assert.deepEqual(colors(), [0x445566, 0x445566, 0x654321, 0x445566]);
+  setGeometryGroupEdgeColor(group, 0xffffff, [99]);
+  assert.deepEqual(colors(), [0x445566, 0x445566, 0x654321, 0x445566]);
+
+  setGeometryGroupHiddenBodies(group, new Set([1]));
+  setGeometryGroupEdgeThickness(group, 0);
+  setGeometryGroupEdgeColor(group, 0x112233);
+  setGeometryGroupHiddenBodies(group, new Set());
+  setGeometryGroupEdgeThickness(group, 1);
+  setGeometryGroupShading(group, "original");
+  assert.deepEqual(colors(), [0x112233, 0x112233, 0x112233, 0x445566]);
+  disposeGroup(group);
+});
+
+test("colors fallback face boundaries without changing selection highlights", () => {
+  const group = createGeometryGroup([0, 1].map((faceIndex) => ({
+    faceIndex,
+    bodyIndex: faceIndex,
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    indices: new Uint32Array([0, 1, 2]),
+  })));
+  const boundaries = getBoundaryLines(group);
+  setGeometryGroupEdgeColor(group, 0x123456, [0]);
+  assert.ok(boundaries.filter((line) => line.userData.faceIndex === 0)
+    .every((line) => line.material.color.getHex() === 0x123456));
+  assert.ok(boundaries.filter((line) => line.userData.faceIndex === 1)
+    .every((line) => line.material.color.getHex() === 0));
+  setGeometryGroupHiddenBodies(group, new Set([0]));
+  setGeometryGroupEdgeColor(group, 0xabcdef);
+  assert.ok(boundaries.every((line) => line.material.color.getHex() ===
+    (line.userData.faceIndex === 0 ? 0x123456 : 0xabcdef)));
+  assert.ok(getSelectionHighlights(group)
+    .every((highlight) => highlight.material.color.getHex() === 0xff0000));
   disposeGroup(group);
 });
 

@@ -725,6 +725,33 @@ export function setGeometryGroupFaceColor(
   });
 }
 
+export function setGeometryGroupEdgeColor(
+  group: THREE.Group,
+  color: number,
+  faceIndices: readonly number[] = [],
+  edgeIndices: readonly number[] = [],
+): void {
+  const faces = new Set(faceIndices);
+  const edges = new Set(edgeIndices);
+  const hasSelection = faces.size > 0 || edges.size > 0;
+  group.traverse((object) => {
+    if (
+      !(object instanceof THREE.Mesh) ||
+      !object.userData.isEdgeLine ||
+      object.userData.isSelectionHighlight
+    ) return;
+    if (hasSelection) {
+      const adjacentFaces: number[] = object.userData.faceIndices ??
+        [object.userData.faceIndex];
+      if (!edges.has(object.userData.edgeIndex) &&
+          !adjacentFaces.some((faceIndex) => faces.has(faceIndex))) return;
+    } else if (object.userData.isBodyHidden) {
+      return;
+    }
+    (object.material as LineMaterial).color.set(color);
+  });
+}
+
 export function setGeometryGroupEdgeThickness(
   group: THREE.Group,
   edgeThickness: number,
@@ -1165,6 +1192,7 @@ export function createStepRenderer(
   setHiddenBodies(bodyIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
   setFaceColor(color: number, faceIndices: readonly number[]): void;
+  setEdgeColor(color: number, faceIndices: readonly number[], edgeIndices: readonly number[]): void;
   setFaceOpacity(opacity: number, faceIndices: readonly number[]): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
@@ -1331,6 +1359,10 @@ export function createStepRenderer(
 
   const setFaceColor = (color: number, faceIndices: readonly number[]) => {
     if (geometryGroup) setGeometryGroupFaceColor(geometryGroup, color, new Set(faceIndices));
+  };
+
+  const setEdgeColor = (color: number, faceIndices: readonly number[], edgeIndices: readonly number[]) => {
+    if (geometryGroup) setGeometryGroupEdgeColor(geometryGroup, color, faceIndices, edgeIndices);
   };
 
   const setFaceOpacity = (opacity: number, faceIndices: readonly number[]) => {
@@ -1520,6 +1552,7 @@ export function createStepRenderer(
     setShadingMode,
     setStyleState,
     setFaceColor,
+    setEdgeColor,
     setFaceOpacity,
     setEdgeThickness,
     setShowSmoothEdges,
