@@ -1112,6 +1112,60 @@ test("preserves selection highlights across body, face, and edge scopes", () => 
   disposeGroup(group);
 });
 
+test("face edges can be highlighted and independently deselected in edge scope", () => {
+  const sharedEdge = { edgeIndex: 10, positions: new Float32Array([0, 0, 0, 1, 0, 0]) };
+  const group = createGeometryGroup([
+    {
+      faceIndex: 4,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [
+        sharedEdge,
+        { edgeIndex: 11, positions: new Float32Array([0, 0, 0, 0, 1, 0]) },
+      ],
+    },
+    {
+      faceIndex: 5,
+      bodyIndex: 0,
+      positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, -1, 0]),
+      indices: new Uint32Array([0, 1, 2]),
+      edges: [
+        sharedEdge,
+        { edgeIndex: 12, positions: new Float32Array([1, 0, 0, 1, -1, 0]) },
+      ],
+    },
+  ]);
+  const selection = new SelectionModel();
+  selection.toggleAll([4, 5]);
+  const selectedEdges = new Set([12]);
+  for (const edgeIndex of getEdgeIndicesForFaces(group, selection.selectedFaces)) {
+    selectedEdges.add(edgeIndex);
+  }
+  setGeometryGroupSelection(group, new Set(selection.selectedFaces), "edge");
+  setGeometryGroupEdgeSelection(group, [...selectedEdges]);
+  assert.deepEqual([...selectedEdges].sort(), [10, 11, 12]);
+  assert.deepEqual(
+    group.children.filter((child) => child.userData.isEdgeSelectionHighlight)
+      .flatMap((child) => child.userData.edgeIndices).sort(),
+    [10, 11, 12],
+  );
+
+  const ray = new THREE.Raycaster(new THREE.Vector3(0.5, 0.05, 2), new THREE.Vector3(0, 0, -1));
+  const pickedEdge = raycastEdge(ray, group, 4, new THREE.Vector3(0.5, 0.05, 0));
+  assert.equal(pickedEdge.edgeIndex, 10);
+  selectedEdges.delete(pickedEdge.edgeIndex);
+  setGeometryGroupEdgeSelection(group, [...selectedEdges]);
+  assert.deepEqual([...group.userData.selectedEdgeIndices].sort(), [11, 12]);
+  assert.deepEqual(
+    group.children.filter((child) => child.userData.isEdgeSelectionHighlight)
+      .flatMap((child) => child.userData.edgeIndices).sort(),
+    [11, 12],
+  );
+  assert.deepEqual(selection.selectedFaces, [4, 5]);
+  disposeGroup(group);
+});
+
 test("renders a separate projected mask for each selected body on every camera change", () => {
   const vertices = [
     [0, 0, 0],
