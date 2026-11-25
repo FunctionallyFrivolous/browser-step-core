@@ -306,8 +306,8 @@ function updateEdgeThicknessControl(): void {
 }
 
 function getSelectedEdgeIndices(): number[] | undefined {
-  if (selectionScope === "edge" && selectedEdgeIndices.size > 0) {
-    return [...selectedEdgeIndices];
+  if (selectionScope === "edge") {
+    return selectedEdgeIndices.size > 0 ? [...selectedEdgeIndices] : undefined;
   }
 
   const selectedFaces = selection.selectedFaces;
@@ -349,9 +349,16 @@ hideBodiesButton.addEventListener("click", () => {
 selectionScopeControl.addEventListener("change", (event) => {
   const input = event.target;
   if (!(input instanceof HTMLInputElement) || !input.checked) return;
+  const previousScope = selectionScope;
   selectionScope = input.value === "object"
     ? "object"
     : input.value === "edge" ? "edge" : "face";
+  if (previousScope === "face" && selectionScope === "edge") {
+    for (const edgeIndex of renderer.getEdgeIndicesForFaces(selection.selectedFaces)) {
+      selectedEdgeIndices.add(edgeIndex);
+    }
+    renderer.setSelectedEdges([...selectedEdgeIndices]);
+  }
   renderer.setSelectionScope(selectionScope);
   updateSelectionStatus();
   updateEdgeThicknessControl();

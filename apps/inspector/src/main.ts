@@ -146,9 +146,16 @@ function clearSelection(): void {
 selectionScopeControl.addEventListener("change", (event) => {
   const input = event.target;
   if (!(input instanceof HTMLInputElement) || !input.checked) return;
+  const previousScope = selectionScope;
   selectionScope = input.value === "object"
     ? "object"
     : input.value === "edge" ? "edge" : "face";
+  if (previousScope === "face" && selectionScope === "edge") {
+    for (const edgeIndex of renderer.getEdgeIndicesForFaces(selection.selectedFaces)) {
+      selectedEdgeIndices.add(edgeIndex);
+    }
+    renderer.setSelectedEdges([...selectedEdgeIndices]);
+  }
   renderer.setSelectionScope(selectionScope);
   updateSelectionStatus();
 });
