@@ -28,6 +28,10 @@ restores it. The initial saved view is captured after the first model is fitted.
 Use **Snap View** and select a planar face to align the camera with that face.
 Non-planar faces leave the tool active; press the button again to cancel.
 
+The viewer's **Edge color** control colors selected edges and the edges of
+selected faces or bodies. With nothing selected, it colors edges on all visible
+bodies; hidden bodies retain their colors.
+
 ## GitHub Pages deployment
 
 In the repository's **Settings → Pages → Build and deployment**, set **Source** to

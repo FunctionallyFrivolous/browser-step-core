@@ -94,6 +94,13 @@ faceColorInput.type = "color";
 faceColorInput.setAttribute("aria-label", "Face color");
 faceColorControl.append("Face color", faceColorInput);
 
+const edgeColorControl = document.createElement("label");
+const edgeColorInput = document.createElement("input");
+edgeColorInput.type = "color";
+edgeColorInput.value = "#000000";
+edgeColorInput.setAttribute("aria-label", "Edge color");
+edgeColorControl.append("Edge color", edgeColorInput);
+
 const opacityControl = document.createElement("label");
 const opacitySlider = document.createElement("input");
 opacitySlider.type = "range";
@@ -172,6 +179,7 @@ controls.append(
   selectionScopeControl,
   hideBodiesButton,
   faceColorControl,
+  edgeColorControl,
   opacityControl,
   edgeThicknessControl,
   projectionSelect,
@@ -387,6 +395,10 @@ faceColorInput.addEventListener("input", () => {
   if (selectedFaces.length === 0) {
     style.setState({ ...style.state, faceColor: color });
   }
+});
+edgeColorInput.addEventListener("input", () => {
+  const color = Number.parseInt(edgeColorInput.value.slice(1), 16);
+  renderer.setEdgeColor(color, selection.selectedFaces, [...selectedEdgeIndices]);
 });
 opacitySlider.addEventListener("input", () => {
   const opacity = Number(opacitySlider.value);
