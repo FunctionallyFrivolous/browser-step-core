@@ -1256,6 +1256,8 @@ export function renderSceneWithDepthPrepass(
   renderer.render(scene, camera);
 }
 
+export const DEFAULT_BACKGROUND_COLOR = 0xf1f3f5;
+
 export function createStepRenderer(
   container: HTMLElement,
   onPick: (
@@ -1273,6 +1275,7 @@ export function createStepRenderer(
   setFacePickingOnly(enabled: boolean): void;
   setHiddenBodies(bodyIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
+  setBackgroundColor(color: number): void;
   setFaceColor(color: number, faceIndices: readonly number[]): void;
   getFaceStyle(faceIndex: number): { color: number; opacity: number } | undefined;
   setEdgeColor(color: number, faceIndices: readonly number[], edgeIndices: readonly number[]): void;
@@ -1290,7 +1293,8 @@ export function createStepRenderer(
   dispose(): void;
 } {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf1f3f5);
+  const background = new THREE.Color(DEFAULT_BACKGROUND_COLOR);
+  scene.background = background;
 
   let aspect = 1;
   let camera: THREE.PerspectiveCamera | THREE.OrthographicCamera =
@@ -1649,6 +1653,7 @@ export function createStepRenderer(
     setViewState,
     setShadingMode,
     setStyleState,
+    setBackgroundColor: (color) => background.set(color),
     setFaceColor,
     getFaceStyle: (faceIndex) => geometryGroup ? getGeometryGroupFaceStyle(geometryGroup, faceIndex) : undefined,
     setEdgeColor,

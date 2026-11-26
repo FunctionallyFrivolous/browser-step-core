@@ -31,6 +31,8 @@ Non-planar faces leave the tool active; press the button again to cancel.
 The viewer's **Edge color** control colors selected edges and the edges of
 selected faces or bodies. With nothing selected, it colors edges on all visible
 bodies; hidden bodies retain their colors.
+The **Background color** control changes the model viewport background without
+changing the model.
 
 ## GitHub Pages deployment
 

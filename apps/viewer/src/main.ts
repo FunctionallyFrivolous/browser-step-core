@@ -8,6 +8,7 @@ import {
 import {
   alignViewToNormal,
   createStepRenderer,
+  DEFAULT_BACKGROUND_COLOR,
   type CameraProjection,
   type OrbitMode,
   type SelectionScope,
@@ -100,6 +101,13 @@ edgeColorInput.type = "color";
 edgeColorInput.value = "#000000";
 edgeColorInput.setAttribute("aria-label", "Edge color");
 edgeColorControl.append("Edge color", edgeColorInput);
+
+const backgroundColorControl = document.createElement("label");
+const backgroundColorInput = document.createElement("input");
+backgroundColorInput.type = "color";
+backgroundColorInput.value = `#${DEFAULT_BACKGROUND_COLOR.toString(16).padStart(6, "0")}`;
+backgroundColorInput.setAttribute("aria-label", "Background color");
+backgroundColorControl.append("Background color", backgroundColorInput);
 
 const opacityControl = document.createElement("label");
 const opacitySlider = document.createElement("input");
@@ -200,6 +208,7 @@ controls.append(
   hideBodiesButton,
   faceColorControl,
   edgeColorControl,
+  backgroundColorControl,
   opacityControl,
   edgeThicknessControl,
   edgeDashControl,
@@ -448,6 +457,9 @@ faceColorInput.addEventListener("input", () => {
 edgeColorInput.addEventListener("input", () => {
   const color = Number.parseInt(edgeColorInput.value.slice(1), 16);
   renderer.setEdgeColor(color, selection.selectedFaces, [...selectedEdgeIndices]);
+});
+backgroundColorInput.addEventListener("input", () => {
+  renderer.setBackgroundColor(Number.parseInt(backgroundColorInput.value.slice(1), 16));
 });
 opacitySlider.addEventListener("input", () => {
   const opacity = Number(opacitySlider.value);
