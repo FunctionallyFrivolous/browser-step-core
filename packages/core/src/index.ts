@@ -301,6 +301,14 @@ export class ModelSession {
     return this.kernel.getTessellation();
   }
 
+  getTangentFaces(faceIndex: number): number[] {
+    return this.kernel.getTangentFaces?.(faceIndex) ?? [faceIndex];
+  }
+
+  getTangentEdges(edgeIndex: number): number[] {
+    return this.kernel.getTangentEdges?.(edgeIndex) ?? [edgeIndex];
+  }
+
   get revisionId(): number {
     return this.modelRevision;
   }

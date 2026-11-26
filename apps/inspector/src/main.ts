@@ -65,10 +65,15 @@ for (const scope of ["object", "face", "edge"] as const) {
   input.name = "selection-scope";
   input.value = scope;
   input.checked = scope === "face";
-  input.setAttribute("aria-label", scope === "object" ? "Object" : scope === "face" ? "Face" : "Edge");
-  label.append(input, scope === "object" ? "Object" : scope === "face" ? "Face" : "Edge");
+  input.setAttribute("aria-label", scope === "object" ? "Body" : scope === "face" ? "Face" : "Edge");
+  label.append(input, scope === "object" ? "Body" : scope === "face" ? "Face" : "Edge");
   selectionScopeControl.append(label);
 }
+const tangentLabel = document.createElement("label");
+const tangentToggle = document.createElement("input");
+tangentToggle.type = "checkbox";
+tangentLabel.append(tangentToggle, "Tangent");
+selectionScopeControl.append(tangentLabel);
 
 const viewport = document.createElement("div");
 viewport.className = "viewport";
@@ -96,10 +101,13 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) 
     if (edgeIndex === undefined) {
       clearSelection();
       return;
-    } else if (selectedEdgeIndices.has(edgeIndex)) {
-      selectedEdgeIndices.delete(edgeIndex);
     } else {
-      selectedEdgeIndices.add(edgeIndex);
+      const edges = tangentToggle.checked ? session.getTangentEdges(edgeIndex) : [edgeIndex];
+      const shouldDeselect = edges.every((index) => selectedEdgeIndices.has(index));
+      for (const index of edges) {
+        if (shouldDeselect) selectedEdgeIndices.delete(index);
+        else selectedEdgeIndices.add(index);
+      }
     }
     renderer.setSelectedEdges([...selectedEdgeIndices]);
     updateSelectionStatus();
@@ -111,9 +119,11 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) 
   } else if (selectionScope === "object") {
     selection.toggleAll(bodyFaces.get(bodyIndex ?? faceIndex) ?? [faceIndex]);
   } else {
-    selection.toggle(faceIndex);
+    if (tangentToggle.checked) selection.toggleAll(session.getTangentFaces(faceIndex));
+    else selection.toggle(faceIndex);
   }
 });
+renderer.setSelectionScope(selectionScope);
 selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
   updateSelectionStatus();
@@ -145,11 +155,12 @@ function clearSelection(): void {
 
 selectionScopeControl.addEventListener("change", (event) => {
   const input = event.target;
-  if (!(input instanceof HTMLInputElement) || !input.checked) return;
+  if (!(input instanceof HTMLInputElement) || input.name !== "selection-scope" || !input.checked) return;
   const previousScope = selectionScope;
   selectionScope = input.value === "object"
     ? "object"
     : input.value === "edge" ? "edge" : "face";
+  tangentToggle.disabled = selectionScope === "object";
   if (previousScope === "face" && selectionScope === "edge") {
     for (const edgeIndex of renderer.getEdgeIndicesForFaces(selection.selectedFaces)) {
       selectedEdgeIndices.add(edgeIndex);
