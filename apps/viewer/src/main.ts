@@ -132,6 +132,20 @@ edgeThicknessControl.append(
   edgeThicknessValue,
 );
 
+const edgeDashControl = document.createElement("label");
+edgeDashControl.className = "edge-dash-control";
+const edgeDashSlider = document.createElement("input");
+edgeDashSlider.type = "range";
+edgeDashSlider.min = "0";
+edgeDashSlider.max = "20";
+edgeDashSlider.step = "0.1";
+edgeDashSlider.value = "0";
+edgeDashSlider.setAttribute("aria-label", "Edge dash length");
+const edgeDashValue = document.createElement("output");
+edgeDashValue.value = "Solid";
+edgeDashValue.textContent = edgeDashValue.value;
+edgeDashControl.append("Edge dash length", edgeDashSlider, edgeDashValue);
+
 const smoothEdgesControl = document.createElement("label");
 const smoothEdgesToggle = document.createElement("input");
 smoothEdgesToggle.type = "checkbox";
@@ -182,6 +196,7 @@ controls.append(
   edgeColorControl,
   opacityControl,
   edgeThicknessControl,
+  edgeDashControl,
   projectionSelect,
   orbitModeControl,
   lightingControl,
@@ -204,6 +219,7 @@ let selectionScope: SelectionScope = "object";
 const selectedEdgeIndices = new Set<number>();
 const edgeThicknessOverrides = new Map<number, number>();
 let globalEdgeThickness = Number(edgeThicknessSlider.value);
+let globalEdgeDashSize = 0;
 let bodyFaces = new Map<number, number[]>();
 let hiddenBodies = new Set<number>();
 let updatingViewFromRenderer = false;
@@ -231,6 +247,7 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) 
     renderer.setSelectedEdges([...selectedEdgeIndices]);
     updateSelectionStatus();
     updateEdgeThicknessControl();
+    updateEdgeDashControl();
     return;
   }
 
@@ -275,6 +292,7 @@ selection.subscribe((selectedFaceIndices) => {
   renderer.setSelectedFaces(selectedFaceIndices);
   updateSelectionStatus();
   updateEdgeThicknessControl();
+  updateEdgeDashControl();
   updateBodyVisibilityControl();
 });
 
@@ -301,6 +319,21 @@ function clearSelection(): void {
   selection.clear();
   updateSelectionStatus();
   updateEdgeThicknessControl();
+  updateEdgeDashControl();
+}
+
+function getEdgeDashTargets(): { faces: readonly number[]; edges: number[] } {
+  return selectionScope === "edge"
+    ? { faces: [], edges: [...selectedEdgeIndices] }
+    : { faces: selection.selectedFaces, edges: [] };
+}
+
+function updateEdgeDashControl(): void {
+  const { faces, edges } = getEdgeDashTargets();
+  const size = renderer.getEdgeDashSize(faces, edges) ?? globalEdgeDashSize;
+  edgeDashSlider.value = String(size);
+  edgeDashValue.value = size === 0 ? "Solid" : `${size} units`;
+  edgeDashValue.textContent = edgeDashValue.value;
 }
 
 function updateEdgeThicknessControl(): void {
@@ -370,6 +403,7 @@ selectionScopeControl.addEventListener("change", (event) => {
   renderer.setSelectionScope(selectionScope);
   updateSelectionStatus();
   updateEdgeThicknessControl();
+  updateEdgeDashControl();
 });
 
 fitButton.addEventListener("click", renderer.fitToView);
@@ -426,6 +460,13 @@ edgeThicknessSlider.addEventListener("input", () => {
   edgeThicknessValue.value = `${thickness} px`;
   edgeThicknessValue.textContent = edgeThicknessValue.value;
 });
+edgeDashSlider.addEventListener("input", () => {
+  const size = Number(edgeDashSlider.value);
+  const { faces, edges } = getEdgeDashTargets();
+  renderer.setEdgeDashSize(size, faces, edges);
+  if (faces.length === 0 && edges.length === 0) globalEdgeDashSize = size;
+  updateEdgeDashControl();
+});
 smoothEdgesToggle.addEventListener("change", () => {
   renderer.setShowSmoothEdges(smoothEdgesToggle.checked);
 });
@@ -471,6 +512,7 @@ async function loadModel(name: string, readData: () => Promise<ArrayBuffer>): Pr
     hiddenBodies = new Set();
     updateBodyVisibilityControl();
     renderer.renderMeshes(meshes, style.state);
+    updateEdgeDashControl();
     fitButton.disabled = false;
     snapViewButton.disabled = false;
     if (!hasInitialSavedView) {

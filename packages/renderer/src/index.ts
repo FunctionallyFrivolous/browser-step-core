@@ -752,6 +752,56 @@ export function setGeometryGroupEdgeColor(
   });
 }
 
+export function setGeometryGroupEdgeDashSize(
+  group: THREE.Group,
+  dashSize: number,
+  faceIndices: readonly number[] = [],
+  edgeIndices: readonly number[] = [],
+): void {
+  const size = Math.max(Number.isFinite(dashSize) ? dashSize : 0, 0);
+  const faces = new Set(faceIndices);
+  const edges = new Set(edgeIndices);
+  const hasSelection = faces.size > 0 || edges.size > 0;
+  group.traverse((object) => {
+    if (!(object instanceof LineSegments2) ||
+        !object.userData.isEdgeLine || object.userData.isSelectionHighlight) return;
+    if (hasSelection) {
+      const adjacentFaces: number[] = object.userData.faceIndices ?? [object.userData.faceIndex];
+      if (!edges.has(object.userData.edgeIndex) &&
+          !adjacentFaces.some((faceIndex) => faces.has(faceIndex))) return;
+    } else if (object.userData.isBodyHidden) {
+      return;
+    }
+    if (size > 0 && !object.geometry.getAttribute("instanceDistanceStart")) {
+      object.computeLineDistances();
+    }
+    const material = object.material as LineMaterial;
+    material.dashed = size > 0;
+    material.dashSize = size;
+    material.gapSize = size;
+  });
+}
+
+export function getGeometryGroupEdgeDashSize(
+  group: THREE.Group,
+  faceIndices: readonly number[],
+  edgeIndices: readonly number[],
+): number | undefined {
+  const faces = new Set(faceIndices);
+  const edges = new Set(edgeIndices);
+  let size: number | undefined;
+  group.traverse((object) => {
+    if (size !== undefined || !(object instanceof LineSegments2) ||
+        !object.userData.isEdgeLine || object.userData.isSelectionHighlight) return;
+    const adjacentFaces: number[] = object.userData.faceIndices ?? [object.userData.faceIndex];
+    if (!edges.has(object.userData.edgeIndex) &&
+        !adjacentFaces.some((faceIndex) => faces.has(faceIndex))) return;
+    const material = object.material as LineMaterial;
+    size = material.dashed ? material.dashSize : 0;
+  });
+  return size;
+}
+
 export function setGeometryGroupEdgeThickness(
   group: THREE.Group,
   edgeThickness: number,
@@ -1193,6 +1243,8 @@ export function createStepRenderer(
   setStyleState(style: StyleState): void;
   setFaceColor(color: number, faceIndices: readonly number[]): void;
   setEdgeColor(color: number, faceIndices: readonly number[], edgeIndices: readonly number[]): void;
+  setEdgeDashSize(size: number, faceIndices: readonly number[], edgeIndices: readonly number[]): void;
+  getEdgeDashSize(faceIndices: readonly number[], edgeIndices: readonly number[]): number | undefined;
   setFaceOpacity(opacity: number, faceIndices: readonly number[]): void;
   fitToView(): void;
   setProjection(projection: CameraProjection): void;
@@ -1234,6 +1286,7 @@ export function createStepRenderer(
   let selectedFaceIndices: readonly number[] = [];
   let selectedEdgeIndices: readonly number[] = [];
   let edgeThickness = 1;
+  let edgeDashSize = 0;
   let showSmoothEdges = true;
   let animationFrame = 0;
   const raycaster = new THREE.Raycaster();
@@ -1364,6 +1417,16 @@ export function createStepRenderer(
   const setEdgeColor = (color: number, faceIndices: readonly number[], edgeIndices: readonly number[]) => {
     if (geometryGroup) setGeometryGroupEdgeColor(geometryGroup, color, faceIndices, edgeIndices);
   };
+
+  const setEdgeDashSize = (size: number, faceIndices: readonly number[], edgeIndices: readonly number[]) => {
+    if (faceIndices.length === 0 && edgeIndices.length === 0) {
+      edgeDashSize = Math.max(Number.isFinite(size) ? size : 0, 0);
+    }
+    if (geometryGroup) setGeometryGroupEdgeDashSize(geometryGroup, size, faceIndices, edgeIndices);
+  };
+
+  const getEdgeDashSize = (faceIndices: readonly number[], edgeIndices: readonly number[]) =>
+    geometryGroup ? getGeometryGroupEdgeDashSize(geometryGroup, faceIndices, edgeIndices) : undefined;
 
   const setFaceOpacity = (opacity: number, faceIndices: readonly number[]) => {
     if (geometryGroup) setGeometryGroupOpacity(geometryGroup, opacity, new Set(faceIndices));
@@ -1506,6 +1569,7 @@ export function createStepRenderer(
       width: Math.max(container.clientWidth, 1),
       height: Math.max(container.clientHeight, 1),
     };
+    setGeometryGroupEdgeDashSize(geometryGroup, edgeDashSize);
     silhouettePass.setGroup(geometryGroup);
     setGeometryGroupStyle(geometryGroup, style);
     setGeometryGroupSelection(
@@ -1553,6 +1617,8 @@ export function createStepRenderer(
     setStyleState,
     setFaceColor,
     setEdgeColor,
+    setEdgeDashSize,
+    getEdgeDashSize,
     setFaceOpacity,
     setEdgeThickness,
     setShowSmoothEdges,
