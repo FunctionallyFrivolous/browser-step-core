@@ -8,6 +8,8 @@ import {
   createCameraFromViewState,
   getEdgeIndicesForFaces,
   getGeometryGroupEdgeDashSize,
+  getGeometryGroupEdgeStyle,
+  getGeometryGroupFaceStyle,
   fitCameraToBounds,
   fitOrthographicCameraToBounds,
   getCameraViewState,
@@ -720,6 +722,38 @@ test("applies shared face color, opacity, and visibility while preserving select
   assert.equal(faces[1].material.opacity, 0.25);
   assert.ok(boundaries.every((boundary) => boundary.material.opacity === 1));
 
+  disposeGroup(group);
+});
+
+test("reads face and edge styles independently of selection highlights", () => {
+  const group = createGeometryGroup([0, 1].map((faceIndex) => ({
+    faceIndex,
+    positions: new Float32Array([0, 0, faceIndex, 1, 0, faceIndex, 0, 1, faceIndex]),
+    indices: new Uint32Array([0, 1, 2]),
+    edges: [{ edgeIndex: faceIndex, positions: new Float32Array([0, 0, faceIndex, 1, 0, faceIndex]) }],
+  })));
+  setGeometryGroupStyle(group, { faceColor: 0x123456, opacity: 0.8, visible: true });
+  setGeometryGroupFaceColor(group, 0xabcdef, new Set([0]));
+  setGeometryGroupOpacity(group, 0.25, new Set([0]));
+  setGeometryGroupEdgeColor(group, 0x654321, [], [0]);
+  setGeometryGroupEdgeThickness(group, 2.5, [0]);
+  setGeometryGroupEdgeDashSize(group, 3, [], [0]);
+  setGeometryGroupSelection(group, new Set([0, 1]), "face");
+  setGeometryGroupEdgeSelection(group, [0, 1]);
+
+  assert.deepEqual(getGeometryGroupFaceStyle(group, 0), { color: 0xabcdef, opacity: 0.25 });
+  assert.deepEqual(getGeometryGroupFaceStyle(group, 1), { color: 0x123456, opacity: 0.8 });
+  assert.deepEqual(getGeometryGroupEdgeStyle(group, 0), { color: 0x654321, thickness: 2.5, dashSize: 3 });
+  assert.deepEqual(getGeometryGroupEdgeStyle(group, 1), { color: 0, thickness: 1, dashSize: 0 });
+  assert.equal(getGeometryGroupFaceStyle(group, 99), undefined);
+  assert.equal(getGeometryGroupEdgeStyle(group, 99), undefined);
+
+  setGeometryGroupOpacity(group, 0, new Set([0]));
+  setGeometryGroupEdgeThickness(group, 0, [0]);
+  setGeometryGroupEdgeDashSize(group, 0, [], [0]);
+  setGeometryGroupShading(group, "original");
+  assert.equal(getGeometryGroupFaceStyle(group, 0).opacity, 0);
+  assert.deepEqual(getGeometryGroupEdgeStyle(group, 0), { color: 0x654321, thickness: 0, dashSize: 0 });
   disposeGroup(group);
 });
 
