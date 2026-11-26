@@ -53,12 +53,14 @@ label {
 }
 
 .opacity-control input,
-.edge-thickness-control input {
+.edge-thickness-control input,
+.edge-dash-control input {
   width: min(240px, 40vw);
 }
 
 .opacity-control output,
-.edge-thickness-control output {
+.edge-thickness-control output,
+.edge-dash-control output {
   min-width: 3em;
 }
 

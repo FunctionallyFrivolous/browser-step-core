@@ -7,6 +7,7 @@ import {
   createCameraControls,
   createCameraFromViewState,
   getEdgeIndicesForFaces,
+  getGeometryGroupEdgeDashSize,
   fitCameraToBounds,
   fitOrthographicCameraToBounds,
   getCameraViewState,
@@ -16,6 +17,7 @@ import {
   raycastEdge,
   renderSceneWithDepthPrepass,
   setGeometryGroupEdgeColor,
+  setGeometryGroupEdgeDashSize,
   setGeometryGroupEdgeThickness,
   setGeometryGroupEdgeSelection,
   setGeometryGroupFaceColor,
@@ -833,6 +835,71 @@ test("colors fallback face boundaries without changing selection highlights", ()
     (line.userData.faceIndex === 0 ? 0x123456 : 0xabcdef)));
   assert.ok(getSelectionHighlights(group)
     .every((highlight) => highlight.material.color.getHex() === 0xff0000));
+  disposeGroup(group);
+});
+
+test("styles dashes on selected edges, faces, bodies and visible bodies", () => {
+  const edge = (edgeIndex, z) => ({
+    edgeIndex,
+    positions: new Float32Array([0, 0, z, 1, 0, z, 3, 0, z]),
+  });
+  const group = createGeometryGroup([
+    { faceIndex: 0, bodyIndex: 0, edges: [edge(0, 0), edge(1, 1)] },
+    { faceIndex: 1, bodyIndex: 0, edges: [edge(1, 1), edge(2, 2)] },
+    { faceIndex: 2, bodyIndex: 1, edges: [edge(3, 3)] },
+  ].map((mesh) => ({
+    ...mesh,
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    indices: new Uint32Array([0, 1, 2]),
+  })));
+  const lines = getBoundaryLines(group);
+  const sizes = () => lines.map(({ material }) => material.dashed ? material.dashSize : 0);
+
+  setGeometryGroupEdgeDashSize(group, 2, [], [0]);
+  assert.deepEqual(sizes(), [2, 0, 0, 0]);
+  assert.equal(getGeometryGroupEdgeDashSize(group, [], [0]), 2);
+  const starts = lines[0].geometry.getAttribute("instanceDistanceStart");
+  const ends = lines[0].geometry.getAttribute("instanceDistanceEnd");
+  assert.deepEqual([starts.getX(0), ends.getX(0), starts.getX(1), ends.getX(1)], [0, 1, 1, 3]);
+  assert.equal(lines[0].material.gapSize, 2);
+
+  setGeometryGroupEdgeDashSize(group, 3, [1]);
+  assert.deepEqual(sizes(), [2, 3, 3, 0]);
+  setGeometryGroupEdgeDashSize(group, 4, [0, 1]);
+  assert.deepEqual(sizes(), [4, 4, 4, 0]);
+  setGeometryGroupHiddenBodies(group, new Set([1]));
+  setGeometryGroupEdgeDashSize(group, 1);
+  setGeometryGroupHiddenBodies(group, new Set());
+  assert.deepEqual(sizes(), [1, 1, 1, 0]);
+  setGeometryGroupEdgeColor(group, 0x123456, [], [0]);
+  setGeometryGroupEdgeThickness(group, 2, [0]);
+  setGeometryGroupEdgeSelection(group, [0]);
+  assert.equal(lines[0].material.color.getHex(), 0x123456);
+  assert.equal(lines[0].material.linewidth, 2);
+  assert.equal(lines[0].material.dashed, true);
+  assert.ok(getSelectionHighlights(group).every((line) => !line.material.dashed));
+  setGeometryGroupEdgeDashSize(group, 0, [], [0]);
+  assert.deepEqual(sizes(), [0, 1, 1, 0]);
+  assert.equal(getGeometryGroupEdgeDashSize(group, [], [0]), 0);
+  assert.equal(getGeometryGroupEdgeDashSize(group, [], [99]), undefined);
+  disposeGroup(group);
+});
+
+test("styles fallback face boundaries without changing selection highlights", () => {
+  const group = createGeometryGroup([0, 1].map((faceIndex) => ({
+    faceIndex,
+    bodyIndex: faceIndex,
+    positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    indices: new Uint32Array([0, 1, 2]),
+  })));
+  setGeometryGroupEdgeDashSize(group, 0.5, [0]);
+  const lines = getBoundaryLines(group);
+  assert.ok(lines.every((line) => line.material.dashed === (line.userData.faceIndex === 0)));
+  setGeometryGroupHiddenBodies(group, new Set([0]));
+  setGeometryGroupEdgeDashSize(group, 1);
+  assert.ok(lines.every((line) => line.material.dashSize ===
+    (line.userData.faceIndex === 0 ? 0.5 : 1)));
+  assert.ok(getSelectionHighlights(group).every((line) => !line.material.dashed));
   disposeGroup(group);
 });
 
