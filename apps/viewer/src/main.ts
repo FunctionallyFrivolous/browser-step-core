@@ -177,6 +177,12 @@ for (const scope of ["object", "face", "edge"] as const) {
   label.append(input, scope === "object" ? "Body" : scope === "face" ? "Face" : "Edge");
   selectionScopeControl.append(label);
 }
+const tangentLabel = document.createElement("label");
+const tangentToggle = document.createElement("input");
+tangentToggle.type = "checkbox";
+tangentToggle.disabled = true;
+tangentLabel.append(tangentToggle, "Tangent");
+selectionScopeControl.append(tangentLabel);
 
 const viewport = document.createElement("div");
 viewport.className = "viewport";
@@ -237,11 +243,14 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) 
     if (edgeIndex === undefined) {
       clearSelection();
       return;
-    } else if (selectedEdgeIndices.has(edgeIndex)) {
-      selectedEdgeIndices.delete(edgeIndex);
     } else {
-      selectedEdgeIndices.add(edgeIndex);
-      updateSelectedEdgeControls(edgeIndex);
+      const edges = tangentToggle.checked ? session.getTangentEdges(edgeIndex) : [edgeIndex];
+      const shouldDeselect = edges.every((index) => selectedEdgeIndices.has(index));
+      for (const index of edges) {
+        if (shouldDeselect) selectedEdgeIndices.delete(index);
+        else selectedEdgeIndices.add(index);
+      }
+      if (!shouldDeselect) updateSelectedEdgeControls(edgeIndex);
     }
     renderer.setSelectedEdges([...selectedEdgeIndices]);
     updateSelectionStatus();
@@ -254,7 +263,8 @@ const renderer = createStepRenderer(viewport, (faceIndex, bodyIndex, edgeIndex) 
     selection.toggleAll(bodyFaces.get(bodyIndex ?? faceIndex) ?? [faceIndex]);
   } else {
     const newlySelected = !selection.selectedFaces.includes(faceIndex);
-    selection.toggle(faceIndex);
+    if (tangentToggle.checked) selection.toggleAll(session.getTangentFaces(faceIndex));
+    else selection.toggle(faceIndex);
     if (newlySelected) updateSelectedFaceControls(faceIndex);
   }
 }, (state) => {
@@ -395,11 +405,12 @@ hideBodiesButton.addEventListener("click", () => {
 
 selectionScopeControl.addEventListener("change", (event) => {
   const input = event.target;
-  if (!(input instanceof HTMLInputElement) || !input.checked) return;
+  if (!(input instanceof HTMLInputElement) || input.name !== "selection-scope" || !input.checked) return;
   const previousScope = selectionScope;
   selectionScope = input.value === "object"
     ? "object"
     : input.value === "edge" ? "edge" : "face";
+  tangentToggle.disabled = selectionScope === "object";
   if (previousScope === "face" && selectionScope === "edge") {
     for (const edgeIndex of renderer.getEdgeIndicesForFaces(selection.selectedFaces)) {
       selectedEdgeIndices.add(edgeIndex);

@@ -21,9 +21,11 @@ clear them when replacing the geometry after a successful load. Switching from
 face to edge scope also adds the selected faces' edges to the edge selection,
 where they can be toggled individually. Body selections are stored as their
 constituent faces, so individual faces can be toggled after switching to face
-scope. `ModelSession` increments a numeric revision
-after a successful STEP load, but that revision is not currently attached to
-face picks or selection.
+scope. The optional Tangent checkbox expands a face or edge pick to its
+connected tangent chain using the BRep; clicking an entirely selected chain
+deselects it. Tangent selection is unavailable in Body scope. `ModelSession`
+increments a numeric revision after a successful STEP load, but that revision
+is not currently attached to face picks or selection.
 
 The OpenCascade `TopoDS_Shape` remains private to the kernel. Tessellation and
 Three.js objects are derived views; the BRep is authoritative. The current
@@ -45,6 +47,9 @@ workflow loads STEP files but does not implement model editing or save/export.
 - A geometric fingerprint or nearest-face heuristic may help suggest a
   correspondence after reload, but can collide for symmetric or repeated
   geometry. It must not silently establish identity.
+- Face tangency is evaluated at several points on shared BRep edges, not
+  proven continuously. Missing geometric data or undefined derivatives can
+  prevent a chain from extending.
 
 ## Proposed solution
 

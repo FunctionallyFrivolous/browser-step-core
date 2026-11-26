@@ -1,9 +1,21 @@
+import { component, tangentEdges, tangentFaces } from "./tangency.ts";
+
 export interface CadKernel {
   initialize(): Promise<void>;
   loadStep(data: ArrayBuffer | Uint8Array): Promise<void>;
   getBodyCount(): number;
   getFaceCount(): number;
   getTessellation(): TriangleMesh[];
+  /**
+   * Sorted connected component including the face, indexed by TopExp_Explorer.
+   * Tests unoriented normal lines at interior points of shared BRep edges.
+   */
+  getTangentFaces?(faceIndex: number): number[];
+  /**
+   * Sorted connected component including the edge, indexed by TopExp.MapShapes.
+   * Tests unoriented BRep tangent lines at shared vertices.
+   */
+  getTangentEdges?(edgeIndex: number): number[];
 }
 
 export interface TriangleMesh {
@@ -26,6 +38,8 @@ export class LibcascadeKernel implements CadKernel {
   private shape?: import("libcascade/single/init").TopoDS_Shape;
   private bodyCount = 0;
   private faceCount = 0;
+  private faceTangency?: number[][];
+  private edgeTangency?: number[][];
 
   async initialize(): Promise<void> {
     if (!this.initialization) {
@@ -70,16 +84,24 @@ export class LibcascadeKernel implements CadKernel {
 
       const shape = reader.OneShape();
       if (shape.IsNull()) {
+        shape.delete();
         throw new Error("The STEP file does not contain a valid shape.");
       }
 
-      const bodyCount = this.countSubshapes(shape, oc.TopAbs_ShapeEnum.TopAbs_SOLID);
-      const faceCount = this.countSubshapes(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
+      try {
+        const bodyCount = this.countSubshapes(shape, oc.TopAbs_ShapeEnum.TopAbs_SOLID);
+        const faceCount = this.countSubshapes(shape, oc.TopAbs_ShapeEnum.TopAbs_FACE);
 
-      this.shape?.Nullify();
-      this.shape = shape;
-      this.bodyCount = bodyCount;
-      this.faceCount = faceCount;
+        this.shape?.delete();
+        this.shape = shape;
+        this.bodyCount = bodyCount;
+        this.faceCount = faceCount;
+        this.faceTangency = undefined;
+        this.edgeTangency = undefined;
+      } catch (error) {
+        shape.delete();
+        throw error;
+      }
     } finally {
       reader.delete();
       oc.FS.unlink(filePath);
@@ -92,6 +114,18 @@ export class LibcascadeKernel implements CadKernel {
 
   getFaceCount(): number {
     return this.faceCount;
+  }
+
+  getTangentFaces(faceIndex: number): number[] {
+    if (!this.oc || !this.shape) throw new Error("No STEP geometry has been loaded.");
+    this.faceTangency ??= tangentFaces(this.oc, this.shape);
+    return component(faceIndex, this.faceTangency);
+  }
+
+  getTangentEdges(edgeIndex: number): number[] {
+    if (!this.oc || !this.shape) throw new Error("No STEP geometry has been loaded.");
+    this.edgeTangency ??= tangentEdges(this.oc, this.shape);
+    return component(edgeIndex, this.edgeTangency);
   }
 
   getTessellation(): TriangleMesh[] {
