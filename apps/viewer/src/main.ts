@@ -138,13 +138,13 @@ const edgeDashSlider = document.createElement("input");
 edgeDashSlider.type = "range";
 edgeDashSlider.min = "0";
 edgeDashSlider.max = "20";
-edgeDashSlider.step = "0.1";
+edgeDashSlider.step = "0.5";
 edgeDashSlider.value = "0";
 edgeDashSlider.setAttribute("aria-label", "Edge dash length");
 const edgeDashValue = document.createElement("output");
 edgeDashValue.value = "Solid";
 edgeDashValue.textContent = edgeDashValue.value;
-edgeDashControl.append("Edge dash length", edgeDashSlider, edgeDashValue);
+edgeDashControl.append("Edge Dash", edgeDashSlider, edgeDashValue);
 
 const smoothEdgesControl = document.createElement("label");
 const smoothEdgesToggle = document.createElement("input");
