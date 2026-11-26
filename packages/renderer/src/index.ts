@@ -725,6 +725,38 @@ export function setGeometryGroupFaceColor(
   });
 }
 
+export function getGeometryGroupFaceStyle(
+  group: THREE.Group,
+  faceIndex: number,
+): { color: number; opacity: number } | undefined {
+  const face = group.children.find((object) =>
+    object instanceof THREE.Mesh && !object.userData.isEdgeLine &&
+    object.userData.faceIndex === faceIndex,
+  ) as THREE.Mesh | undefined;
+  if (!face || Array.isArray(face.material)) return undefined;
+  return {
+    color: face.userData.faceColor ?? group.userData.faceColor ?? FACE_COLOR,
+    opacity: face.material.opacity,
+  };
+}
+
+export function getGeometryGroupEdgeStyle(
+  group: THREE.Group,
+  edgeIndex: number,
+): { color: number; thickness: number; dashSize: number } | undefined {
+  const edge = group.children.find((object) =>
+    object instanceof LineSegments2 && object.userData.isEdgeLine &&
+    !object.userData.isSelectionHighlight && object.userData.edgeIndex === edgeIndex,
+  ) as LineSegments2 | undefined;
+  if (!edge) return undefined;
+  const material = edge.material as LineMaterial;
+  return {
+    color: material.color.getHex(),
+    thickness: material.linewidth,
+    dashSize: material.dashed ? material.dashSize : 0,
+  };
+}
+
 export function setGeometryGroupEdgeColor(
   group: THREE.Group,
   color: number,
@@ -1242,7 +1274,9 @@ export function createStepRenderer(
   setHiddenBodies(bodyIndices: readonly number[]): void;
   setStyleState(style: StyleState): void;
   setFaceColor(color: number, faceIndices: readonly number[]): void;
+  getFaceStyle(faceIndex: number): { color: number; opacity: number } | undefined;
   setEdgeColor(color: number, faceIndices: readonly number[], edgeIndices: readonly number[]): void;
+  getEdgeStyle(edgeIndex: number): { color: number; thickness: number; dashSize: number } | undefined;
   setEdgeDashSize(size: number, faceIndices: readonly number[], edgeIndices: readonly number[]): void;
   getEdgeDashSize(faceIndices: readonly number[], edgeIndices: readonly number[]): number | undefined;
   setFaceOpacity(opacity: number, faceIndices: readonly number[]): void;
@@ -1616,7 +1650,9 @@ export function createStepRenderer(
     setShadingMode,
     setStyleState,
     setFaceColor,
+    getFaceStyle: (faceIndex) => geometryGroup ? getGeometryGroupFaceStyle(geometryGroup, faceIndex) : undefined,
     setEdgeColor,
+    getEdgeStyle: (edgeIndex) => geometryGroup ? getGeometryGroupEdgeStyle(geometryGroup, edgeIndex) : undefined,
     setEdgeDashSize,
     getEdgeDashSize,
     setFaceOpacity,
