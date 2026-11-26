@@ -122,12 +122,12 @@ edgeThicknessSlider.min = "0";
 edgeThicknessSlider.max = "5";
 edgeThicknessSlider.step = "0.1";
 edgeThicknessSlider.value = "1";
-edgeThicknessSlider.setAttribute("aria-label", "Edge line thickness");
+edgeThicknessSlider.setAttribute("aria-label", "Edge Line");
 const edgeThicknessValue = document.createElement("output");
 edgeThicknessValue.value = "1 px";
 edgeThicknessValue.textContent = edgeThicknessValue.value;
 edgeThicknessControl.append(
-  "Edge line thickness",
+  "Edge Line",
   edgeThicknessSlider,
   edgeThicknessValue,
 );
@@ -140,7 +140,7 @@ edgeDashSlider.min = "0";
 edgeDashSlider.max = "20";
 edgeDashSlider.step = "0.5";
 edgeDashSlider.value = "0";
-edgeDashSlider.setAttribute("aria-label", "Edge dash length");
+edgeDashSlider.setAttribute("aria-label", "Edge Dash");
 const edgeDashValue = document.createElement("output");
 edgeDashValue.value = "Solid";
 edgeDashValue.textContent = edgeDashValue.value;
